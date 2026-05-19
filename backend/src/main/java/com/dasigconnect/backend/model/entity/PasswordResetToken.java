@@ -2,8 +2,6 @@ package com.dasigconnect.backend.model.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -14,25 +12,18 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "invitation_tokens")
-public class InvitationToken {
+@Table(name = "password_reset_tokens")
+public class PasswordResetToken {
 
     @Id
     private UUID id;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
     @Column(name = "token_hash", nullable = false, length = 64)
     private String tokenHash;
-
-    @Column(name = "recipient_email", nullable = false, length = 255)
-    private String recipientEmail;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "assigned_role", nullable = false, length = 20)
-    private UserRole assignedRole;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "institution_id", nullable = false)
-    private Institution institution;
 
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
@@ -59,12 +50,12 @@ public class InvitationToken {
         this.id = id;
     }
 
-    public String getRecipientEmail() {
-        return recipientEmail;
+    public User getUser() {
+        return user;
     }
 
-    public void setRecipientEmail(String recipientEmail) {
-        this.recipientEmail = recipientEmail;
+    public void setUser(User user) {
+        this.user = user;
     }
 
     public String getTokenHash() {
@@ -73,22 +64,6 @@ public class InvitationToken {
 
     public void setTokenHash(String tokenHash) {
         this.tokenHash = tokenHash;
-    }
-
-    public UserRole getAssignedRole() {
-        return assignedRole;
-    }
-
-    public void setAssignedRole(UserRole assignedRole) {
-        this.assignedRole = assignedRole;
-    }
-
-    public Institution getInstitution() {
-        return institution;
-    }
-
-    public void setInstitution(Institution institution) {
-        this.institution = institution;
     }
 
     public Instant getExpiresAt() {

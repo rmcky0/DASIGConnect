@@ -5,9 +5,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapsId;
 import jakarta.persistence.OneToOne;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
@@ -20,6 +19,7 @@ public class AccountLockout {
     private UUID id;
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @MapsId
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
@@ -29,29 +29,8 @@ public class AccountLockout {
     @Column(name = "locked_until")
     private Instant lockedUntil;
 
-    @Column(name = "last_failed_at")
-    private Instant lastFailedAt;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
-    @PrePersist
-    void onCreate() {
-        Instant now = Instant.now();
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
-        createdAt = now;
-        updatedAt = now;
-    }
-
-    @PreUpdate
-    void onUpdate() {
-        updatedAt = Instant.now();
-    }
+    @Column(name = "last_attempt_at")
+    private Instant lastAttemptAt;
 
     public UUID getId() {
         return id;
@@ -85,19 +64,11 @@ public class AccountLockout {
         this.lockedUntil = lockedUntil;
     }
 
-    public Instant getLastFailedAt() {
-        return lastFailedAt;
+    public Instant getLastAttemptAt() {
+        return lastAttemptAt;
     }
 
-    public void setLastFailedAt(Instant lastFailedAt) {
-        this.lastFailedAt = lastFailedAt;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
+    public void setLastAttemptAt(Instant lastAttemptAt) {
+        this.lastAttemptAt = lastAttemptAt;
     }
 }

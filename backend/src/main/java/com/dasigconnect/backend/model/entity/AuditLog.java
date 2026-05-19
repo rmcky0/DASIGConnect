@@ -21,25 +21,24 @@ public class AuditLog {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "institution_id")
-    private Institution institution;
+    @JoinColumn(name = "actor_id")
+    private User actor;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "actor_user_id")
-    private User actorUser;
-
-    @Column(nullable = false, length = 120)
+    @Column(nullable = false, length = 50)
     private String action;
 
-    @Column(name = "entity_type", nullable = false, length = 80)
-    private String entityType;
+    @Column(name = "ip_address", columnDefinition = "inet")
+    private String ipAddress;
 
-    @Column(name = "entity_id")
-    private UUID entityId;
+    @Column(name = "user_agent", columnDefinition = "text")
+    private String userAgent;
 
-    @Column(nullable = false, columnDefinition = "jsonb")
+    @Column(name = "resource_id")
+    private UUID resourceId;
+
+    @Column(columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
-    private String details = "{}";
+    private String metadata;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -48,6 +47,9 @@ public class AuditLog {
     void onCreate() {
         if (id == null) {
             id = UUID.randomUUID();
+        }
+        if (metadata == null) {
+            metadata = "{}";
         }
         createdAt = Instant.now();
     }
@@ -60,20 +62,12 @@ public class AuditLog {
         this.id = id;
     }
 
-    public Institution getInstitution() {
-        return institution;
+    public User getActor() {
+        return actor;
     }
 
-    public void setInstitution(Institution institution) {
-        this.institution = institution;
-    }
-
-    public User getActorUser() {
-        return actorUser;
-    }
-
-    public void setActorUser(User actorUser) {
-        this.actorUser = actorUser;
+    public void setActor(User actor) {
+        this.actor = actor;
     }
 
     public String getAction() {
@@ -84,28 +78,36 @@ public class AuditLog {
         this.action = action;
     }
 
-    public String getEntityType() {
-        return entityType;
+    public String getIpAddress() {
+        return ipAddress;
     }
 
-    public void setEntityType(String entityType) {
-        this.entityType = entityType;
+    public void setIpAddress(String ipAddress) {
+        this.ipAddress = ipAddress;
     }
 
-    public UUID getEntityId() {
-        return entityId;
+    public String getUserAgent() {
+        return userAgent;
     }
 
-    public void setEntityId(UUID entityId) {
-        this.entityId = entityId;
+    public void setUserAgent(String userAgent) {
+        this.userAgent = userAgent;
     }
 
-    public String getDetails() {
-        return details;
+    public UUID getResourceId() {
+        return resourceId;
     }
 
-    public void setDetails(String details) {
-        this.details = details;
+    public void setResourceId(UUID resourceId) {
+        this.resourceId = resourceId;
+    }
+
+    public String getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(String metadata) {
+        this.metadata = metadata;
     }
 
     public Instant getCreatedAt() {

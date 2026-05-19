@@ -1,12 +1,14 @@
 package com.dasigconnect.backend.model.entity;
 
 public enum SubmissionStatus {
-    DRAFT,
-    SUBMITTED,
-    VALIDATING,
-    APPROVED,
-    REJECTED,
-    SCHEDULED,
-    PUBLISHED,
-    CANCELLED
+    draft,
+    pending,
+    in_review,
+    needs_revision,
+    scheduled,
+    publish_failed,
+    published,
+    published_manual,
+    admin_direct_post,
+    rejected
 }

@@ -18,18 +18,15 @@ public class Institution {
     @Id
     private UUID id;
 
-    @Column(nullable = false, length = 160)
+    @Column(nullable = false, length = 255)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 80)
-    private String slug;
+    @Column(nullable = false, unique = true, length = 50)
+    private String code;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32)
-    private InstitutionStatus status = InstitutionStatus.PENDING;
-
-    @Column(name = "workspace_key", unique = true, length = 120)
-    private String workspaceKey;
+    @Column(nullable = false, length = 30)
+    private InstitutionStatus status = InstitutionStatus.onboarding;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -68,12 +65,12 @@ public class Institution {
         this.name = name;
     }
 
-    public String getSlug() {
-        return slug;
+    public String getCode() {
+        return code;
     }
 
-    public void setSlug(String slug) {
-        this.slug = slug;
+    public void setCode(String code) {
+        this.code = code;
     }
 
     public InstitutionStatus getStatus() {
@@ -82,14 +79,6 @@ public class Institution {
 
     public void setStatus(InstitutionStatus status) {
         this.status = status;
-    }
-
-    public String getWorkspaceKey() {
-        return workspaceKey;
-    }
-
-    public void setWorkspaceKey(String workspaceKey) {
-        this.workspaceKey = workspaceKey;
     }
 
     public Instant getCreatedAt() {

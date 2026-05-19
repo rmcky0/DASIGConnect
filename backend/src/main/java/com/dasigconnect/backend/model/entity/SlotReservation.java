@@ -21,33 +21,23 @@ public class SlotReservation {
     @Id
     private UUID id;
 
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "submission_id", nullable = false)
+    private Submission submission;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "institution_id", nullable = false)
     private Institution institution;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "submission_id")
-    private Submission submission;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "reserved_by", nullable = false)
-    private User reservedBy;
-
-    @Column(name = "starts_at", nullable = false)
-    private Instant startsAt;
-
-    @Column(name = "ends_at", nullable = false)
-    private Instant endsAt;
+    @Column(name = "scheduled_at", nullable = false)
+    private Instant scheduledAt;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32)
-    private SlotReservationStatus status = SlotReservationStatus.HELD;
+    @Column(nullable = false, length = 20)
+    private SlotReservationStatus status = SlotReservationStatus.held;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
-
-    @Column(name = "expires_at")
-    private Instant expiresAt;
 
     @PrePersist
     void onCreate() {
@@ -65,14 +55,6 @@ public class SlotReservation {
         this.id = id;
     }
 
-    public Institution getInstitution() {
-        return institution;
-    }
-
-    public void setInstitution(Institution institution) {
-        this.institution = institution;
-    }
-
     public Submission getSubmission() {
         return submission;
     }
@@ -81,28 +63,20 @@ public class SlotReservation {
         this.submission = submission;
     }
 
-    public User getReservedBy() {
-        return reservedBy;
+    public Institution getInstitution() {
+        return institution;
     }
 
-    public void setReservedBy(User reservedBy) {
-        this.reservedBy = reservedBy;
+    public void setInstitution(Institution institution) {
+        this.institution = institution;
     }
 
-    public Instant getStartsAt() {
-        return startsAt;
+    public Instant getScheduledAt() {
+        return scheduledAt;
     }
 
-    public void setStartsAt(Instant startsAt) {
-        this.startsAt = startsAt;
-    }
-
-    public Instant getEndsAt() {
-        return endsAt;
-    }
-
-    public void setEndsAt(Instant endsAt) {
-        this.endsAt = endsAt;
+    public void setScheduledAt(Instant scheduledAt) {
+        this.scheduledAt = scheduledAt;
     }
 
     public SlotReservationStatus getStatus() {
@@ -115,13 +89,5 @@ public class SlotReservation {
 
     public Instant getCreatedAt() {
         return createdAt;
-    }
-
-    public Instant getExpiresAt() {
-        return expiresAt;
-    }
-
-    public void setExpiresAt(Instant expiresAt) {
-        this.expiresAt = expiresAt;
     }
 }

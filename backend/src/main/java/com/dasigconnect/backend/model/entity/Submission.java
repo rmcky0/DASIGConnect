@@ -12,6 +12,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -22,28 +23,58 @@ public class Submission {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "contributor_id", nullable = false)
+    private User contributor;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "institution_id", nullable = false)
     private Institution institution;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "created_by", nullable = false)
-    private User createdBy;
+    @Column(name = "event_title", nullable = false, length = 255)
+    private String eventTitle;
 
-    @Column(nullable = false, length = 180)
-    private String title;
+    @Column(name = "event_date", nullable = false)
+    private LocalDate eventDate;
 
     @Column(columnDefinition = "text")
     private String caption;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 40)
-    private SubmissionStatus status = SubmissionStatus.DRAFT;
+    @Column(columnDefinition = "text")
+    private String description;
 
-    @Column(name = "scheduled_for")
-    private Instant scheduledFor;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private SubmissionStatus status = SubmissionStatus.draft;
+
+    @Column(name = "scheduled_at")
+    private Instant scheduledAt;
 
     @Column(name = "submitted_at")
     private Instant submittedAt;
+
+    @Column(name = "published_at")
+    private Instant publishedAt;
+
+    @Column(name = "platform_post_id", length = 255)
+    private String platformPostId;
+
+    @Column(name = "validator_remarks", columnDefinition = "text")
+    private String validatorRemarks;
+
+    @Column(name = "rejection_reason", columnDefinition = "text")
+    private String rejectionReason;
+
+    @Column(name = "retry_count", nullable = false)
+    private int retryCount;
+
+    @Column(name = "manual_publish_started_at")
+    private Instant manualPublishStartedAt;
+
+    @Column(name = "published_manual_url", columnDefinition = "text")
+    private String publishedManualUrl;
+
+    @Column(name = "published_manual_notes", columnDefinition = "text")
+    private String publishedManualNotes;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -74,6 +105,14 @@ public class Submission {
         this.id = id;
     }
 
+    public User getContributor() {
+        return contributor;
+    }
+
+    public void setContributor(User contributor) {
+        this.contributor = contributor;
+    }
+
     public Institution getInstitution() {
         return institution;
     }
@@ -82,20 +121,20 @@ public class Submission {
         this.institution = institution;
     }
 
-    public User getCreatedBy() {
-        return createdBy;
+    public String getEventTitle() {
+        return eventTitle;
     }
 
-    public void setCreatedBy(User createdBy) {
-        this.createdBy = createdBy;
+    public void setEventTitle(String eventTitle) {
+        this.eventTitle = eventTitle;
     }
 
-    public String getTitle() {
-        return title;
+    public LocalDate getEventDate() {
+        return eventDate;
     }
 
-    public void setTitle(String title) {
-        this.title = title;
+    public void setEventDate(LocalDate eventDate) {
+        this.eventDate = eventDate;
     }
 
     public String getCaption() {
@@ -106,6 +145,14 @@ public class Submission {
         this.caption = caption;
     }
 
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public SubmissionStatus getStatus() {
         return status;
     }
@@ -114,12 +161,12 @@ public class Submission {
         this.status = status;
     }
 
-    public Instant getScheduledFor() {
-        return scheduledFor;
+    public Instant getScheduledAt() {
+        return scheduledAt;
     }
 
-    public void setScheduledFor(Instant scheduledFor) {
-        this.scheduledFor = scheduledFor;
+    public void setScheduledAt(Instant scheduledAt) {
+        this.scheduledAt = scheduledAt;
     }
 
     public Instant getSubmittedAt() {
@@ -128,6 +175,70 @@ public class Submission {
 
     public void setSubmittedAt(Instant submittedAt) {
         this.submittedAt = submittedAt;
+    }
+
+    public Instant getPublishedAt() {
+        return publishedAt;
+    }
+
+    public void setPublishedAt(Instant publishedAt) {
+        this.publishedAt = publishedAt;
+    }
+
+    public String getPlatformPostId() {
+        return platformPostId;
+    }
+
+    public void setPlatformPostId(String platformPostId) {
+        this.platformPostId = platformPostId;
+    }
+
+    public String getValidatorRemarks() {
+        return validatorRemarks;
+    }
+
+    public void setValidatorRemarks(String validatorRemarks) {
+        this.validatorRemarks = validatorRemarks;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public int getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(int retryCount) {
+        this.retryCount = retryCount;
+    }
+
+    public Instant getManualPublishStartedAt() {
+        return manualPublishStartedAt;
+    }
+
+    public void setManualPublishStartedAt(Instant manualPublishStartedAt) {
+        this.manualPublishStartedAt = manualPublishStartedAt;
+    }
+
+    public String getPublishedManualUrl() {
+        return publishedManualUrl;
+    }
+
+    public void setPublishedManualUrl(String publishedManualUrl) {
+        this.publishedManualUrl = publishedManualUrl;
+    }
+
+    public String getPublishedManualNotes() {
+        return publishedManualNotes;
+    }
+
+    public void setPublishedManualNotes(String publishedManualNotes) {
+        this.publishedManualNotes = publishedManualNotes;
     }
 
     public Instant getCreatedAt() {
