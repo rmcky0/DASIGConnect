@@ -30,11 +30,30 @@ jobs:
             refactor
             perf
             test
+            build
+            ci
+            revert
+            security
+            migration
+            hotfix
           scopes: |
             auth
             institution
             submission
             scheduling
+            guardrail
+            slot
             media
+            ai
+            notification
+            validation
+            audit
+            email
+            jwt
+            security
+            rls
+            migration
+            config
             ci
             deps
+            docs
