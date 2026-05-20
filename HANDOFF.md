@@ -1,107 +1,64 @@
-# Handoff — 2026-05-21
+# Handoff - 2026-05-21
 
-## What was done this session
+Current branch: `feature/uc13-submission-backend`
 
-### Analysis
-- Extracted and read SDD (94pp), SRS (134pp), Proposal (12pp), and Module todos in full
-- Updated `TASKS.md` and `CLAUDE.md` with full spec findings on `docs-and-skills` branch, then pushed
+## Status
 
-### UC-1.3 Backend — `feature/uc13-submission-backend` (commit `6b0c60e`)
+### Backend
+- Done: UC-1.3 submission backend endpoints on `/api/v1/submissions`.
+- Done: required merge-blocking tests:
+  - `SubmissionServiceTest`
+  - `SubmissionControllerTest`
+  - `UserServiceTest`
+  - `UserControllerTest`
+- Done: `GlobalExceptionHandler` now returns `400 Bad Request` for missing request parameters instead of falling through to generic server error handling.
+- Done: `InstitutionController` now exposes canonical `/api/v1/institutions` and keeps `/api/v1/admin/institutions` as a legacy alias.
+- Done: M2 stragglers remain in place: resend invitation, `GET /me`, scoped user listing, and user role counts.
 
-**M2 stragglers (completed):**
-- `InvitationService.resend()` — generates a fresh 72h token, resets `pending_email_undelivered` → `pending`, re-sends email; reverts on failure
-- `InvitationController` `POST /api/v1/invitations/{id}/resend`
-- `UserService` — `getProfile()`, `listByInstitution()` (validator scoped to own institution), `countByRole()`
-- `UserController` `GET /api/v1/me`, `GET /api/v1/users?institutionId=`, `GET /api/v1/users/counts?institutionId=`
-- `UserDto` (no password hash)
+### Frontend
+- Done: submission API wiring now matches the backend:
+  - `POST /api/v1/submissions` for draft creation.
+  - `POST /api/v1/submissions/{id}/evaluate-slot` with `{ scheduledAt }`.
+  - Direct browser upload to Supabase Storage, then `POST /api/v1/submissions/{id}/media` with `{ storageUrl, fileName, fileType, fileSizeBytes }`.
+  - `GET/POST /api/v1/institutions`.
+  - Lookup typing now matches backend constants: file types, size limits, media limits, and schedule lead windows.
+- Done: reset password screen and `/reset-password` route are wired to `POST /api/v1/auth/reset-password`.
+- Done: session warning infrastructure now reads JWT `exp`, starts a five-minute countdown, and opens the expiry modal at timeout.
+- Done: dashboard stat tiles are no longer all hardcoded zero; they use live submission/user/institution endpoints where backend support exists.
 
-**UC-1.3 — Flyway migration:**
-- `V3__media_assets.sql` — creates `media_assets` (with `embedding VECTOR(1024)`, `ivfflat` cosine index), `asset_tags` (UNIQUE asset+tag), `submission_media_assets` (junction, ON DELETE CASCADE); RLS on all three tables
+## Verification
 
-**UC-1.3 — New entities:**
-- `MediaFileType` enum — `jpeg, png, webp, gif, mp4, mov, webm`; helpers `isVideo()`, `isImage()`
-- `MediaAsset` — **`embedding` column NOT mapped by Hibernate** (pgvector incompatibility); managed exclusively via native queries
-- `SubmissionMediaAsset` — junction entity for submission↔media_asset with `display_order`
+- Frontend: `npm.cmd run build` passed.
+- Backend: `mvn test` passed using the local Maven distribution because `.\mvnw.cmd` fails in this PowerShell environment.
+- Backend result: `Tests run: 163, Failures: 0, Errors: 0, Skipped: 0`.
 
-**UC-1.3 — Repository additions:**
-- `MediaAssetRepository` — `findActiveById`, `findActiveByInstitution`, `@Modifying` native `updateEmbedding`, native cosine `findTopSimilar` (ready for UC-3.3)
-- `SubmissionMediaAssetRepository` — ordered by display_order, existence check, count queries, active-submission-count for UC-2.2 deletion safety
-- `UserRepository` — added `findByInstitutionIdOrderByCreatedAtDesc`, `countByInstitutionIdAndRole`
-- `SubmissionRepository` — added role-filtered list queries, `existsByIdAndInstitutionId`, `existsByIdAndContributorId`
+Backend test command used:
 
-**UC-1.3 — DTOs:**
-- `SubmissionCreateDto`, `SubmissionUpdateDto` (PATCH semantics — all fields optional)
-- `SubmissionResponseDto` (full detail + media list), `SubmissionSummaryDto` (list view + mediaCount)
-- `SlotEvaluateRequestDto`, `SubmissionLookupsDto` (immutable constants)
-- `AttachMediaDto` (storageUrl from frontend direct-upload), `AttachAssetDto`
-- `MediaAssetSummaryDto`
+```powershell
+& "$env:USERPROFILE\.m2\wrapper\dists\apache-maven-3.9.15\0226a00282e400185496f3b60ec5a3f029cbdc6893912937d4876d57695224e1\bin\mvn.cmd" test
+```
 
-**UC-1.3 — Services/Controllers:**
-- `SubmissionService` — `create` (DRAFT first → reserve slot), `update`, `delete`, `submit` (re-validates guard rails), `evaluateSlot` (read-only), `list` (role-filtered), `attachMedia` (max 10), `attachAsset`
-- `SubmissionController` — all 10 endpoints on `/api/v1/submissions` (lookups declared first to avoid `/{id}` path conflict)
+## Remaining Gaps
 
-**Build state:** 124 existing tests pass; `./mvnw test` = BUILD SUCCESS on this branch.
+- Pending invitation dashboard count still shows `0`; there is no dedicated backend count/list endpoint for pending invitations yet.
+- `GET /api/v1/submissions/lookups` does not provide categories, tags, or preferred time slots. The frontend no longer assumes those fields, but richer category/tag UI needs backend support.
+- `AssetPickerModal` / media library still needs UC-2.2 backend: `MediaAssetController`, especially `GET /api/v1/media-assets` and delete behavior.
+- Validator review queue actions still need UC-2.1 backend: approve, reject, needs-revision, and validator/admin transition rules.
+- SSE notifications still need UC-2.3 backend.
+- Analytics still need UC-2.4 backend aggregate endpoints.
+- Calendar, publishing, Facebook fallback, AI captions, and AI recommendations still need UC-3.x backend.
+- `GET /api/v1/me` helper exists client-side, but app hydration still primarily depends on login/localStorage state. A future cleanup should hydrate current user from `/me` on app load.
+- Supabase browser upload requires frontend env vars:
+  - `VITE_SUPABASE_URL`
+  - `VITE_SUPABASE_STORAGE_BUCKET`
+  - `VITE_SUPABASE_ANON_KEY`
+- Backend runtime still needs real SMTP and Supabase service credentials in the environment.
+- `.\mvnw.cmd` currently fails to start Maven in this PowerShell environment; direct Maven from `.m2/wrapper/dists` works.
 
-## Files changed (commit 6b0c60e — 27 files, +1507 lines)
+## Critical Invariants
 
-- `V3__media_assets.sql` (new Flyway migration)
-- `MediaFileType.java`, `MediaAsset.java`, `SubmissionMediaAsset.java` (new entities)
-- `MediaAssetRepository.java`, `SubmissionMediaAssetRepository.java` (new repos)
-- `UserRepository.java`, `SubmissionRepository.java` (new query methods)
-- All 9 new DTO files
-- `SubmissionNotFoundException.java`, `MediaAssetNotFoundException.java`
-- `SubmissionService.java`, `SubmissionController.java`
-- `UserService.java`, `UserController.java`, `UserDto.java`
-- `InvitationService.java` (resend method), `InvitationController.java` (resend endpoint)
-- `backend/.env.example` (all required env var keys)
-- `TASKS.md`, `CLAUDE.md`, `HANDOFF.md`
-
-## What's NOT done — immediate next steps
-
-### Backend (Chris or next developer)
-1. **Tests for UC-1.3** — `SubmissionServiceTest`, `SubmissionControllerTest`, `UserServiceTest`, `UserControllerTest` are not yet written. All existing 124 tests pass; new tests needed.
-2. **`POST /api/v1/submissions/{id}/override-request`** — deferred to Module 3. Requires a new `override_requests` table (V5 migration) and `OverrideRequestService`. Do NOT implement until Module 3.
-3. **Merge `feature/uc13-submission-backend` → `main`** (or through `dev`) after code review.
-
-### Frontend (Jay, Anton, or next developer)
-All UC-1.3 frontend wiring is unstarted. The backend endpoints are fully live — wire them:
-
-1. **Contributor dashboard / SubmissionFormPage** (Jay)
-   - `GET /api/v1/submissions/lookups` → populate allowed file types and limits
-   - `POST /api/v1/submissions` → create DRAFT
-   - `PATCH /api/v1/submissions/{id}` → auto-save every 60s
-   - `POST /api/v1/submissions/{id}/submit` → submit for review
-   - `DELETE /api/v1/submissions/{id}` → delete DRAFT
-   - `POST /api/v1/submissions/{id}/media` → attach newly uploaded file (upload goes direct to Supabase Storage first, then pass URL here)
-   - `POST /api/v1/submissions/{id}/assets` → attach from media library
-   - `POST /api/v1/submissions/{id}/evaluate-slot` → real-time slot validation in SlotPicker
-
-2. **AssetPickerModal** — lists media library assets; uses `GET /api/v1/media-assets` (UC-2.2, not yet implemented backend-side); stub for now
-
-3. **SessionWarningBanner + SessionExpiredModal** (Anton) — watch JWT `exp` claim, warn at T-5 min, force logout at T-0; wire to `/api/v1/auth/logout`
-
-4. **Institution management page** (unassigned) — uses `GET/POST /api/v1/institutions` (already implemented, M4)
-
-5. **GET /api/v1/me** is live — use it on app load to hydrate user context (role, institution) instead of parsing JWT claims
-
-### Operational
-- Configure real SMTP credentials in `backend/.env` (currently empty — invitation and reset emails will fail)
-- Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` for media upload to work
-
-## Git state
-
-| Branch | Remote | Status |
-|---|---|---|
-| `feature/uc13-submission-backend` | none | **Not pushed yet** — 1 commit ahead of `main` |
-| `main` | `origin/main` | **11 commits ahead** — not pushed (user's decision) |
-| `dev` | `origin/dev` | **22+ commits ahead** — not pushed (user's decision) |
-
-## Critical invariants — do not break
-
-- `embedding` field in `MediaAsset` is NOT a Hibernate-mapped column — native queries only in `MediaAssetRepository`
-- HikariCP max 5 connections (Supabase Session Pooler hard limit) — never increase
-- `application.properties` uses `${DATABASE_USER}`; `.env` uses `DATABASE_USERNAME` — keep in sync
-- Never log JWT tokens, passwords, or API keys
-- `spring.flyway.enabled=false` in test resources — required for `@WebMvcTest` / `@SpringBootTest` isolation
-- Enum values are lowercase (`draft`, `contributor`, etc.) — match DB CHECK constraints
-- Media upload pattern: frontend uploads binary directly to Supabase Storage → passes `storageUrl` to `POST /media`; the backend never handles file bytes in Module 1
+- `MediaAsset.embedding` is not mapped by Hibernate. Keep pgvector reads/writes in native repository queries.
+- Keep HikariCP max pool size at 5 for Supabase Session Pooler.
+- Keep `DATABASE_USER` / `DATABASE_USERNAME` environment naming aligned with `application.properties` and local `.env`.
+- Media upload pattern is frontend direct-to-Supabase first, backend metadata second. Do not switch Module 1 endpoints to multipart upload.
+- Do not log JWTs, reset tokens, invitation tokens, passwords, or API keys.
