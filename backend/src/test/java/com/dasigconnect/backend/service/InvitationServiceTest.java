@@ -99,6 +99,7 @@ class InvitationServiceTest {
             t.setId(UUID.randomUUID());
             return t;
         });
+        when(emailService.buildInvitationLink(anyString())).thenReturn("http://localhost/invite?token=test");
 
         CreateInvitationRequestDto dto = new CreateInvitationRequestDto(
                 "user@example.com", institutionId, UserRole.contributor);

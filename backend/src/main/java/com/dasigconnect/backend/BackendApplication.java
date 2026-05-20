@@ -3,6 +3,7 @@ package com.dasigconnect.backend;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -17,6 +18,7 @@ public class BackendApplication {
 	}
 
 	@Bean
+	@ConditionalOnProperty(name = "spring.flyway.enabled", havingValue = "true", matchIfMissing = true)
 	public org.flywaydb.core.Flyway flyway(DataSource dataSource) {
 		System.out.println("==================================================");
 		System.out.println("INITIALIZING CUSTOM FLYWAY BEAN...");
@@ -34,6 +36,7 @@ public class BackendApplication {
 	}
 
 	@Bean
+	@ConditionalOnProperty(name = "spring.flyway.enabled", havingValue = "true", matchIfMissing = true)
 	public CommandLineRunner dbDiagnostics(
 			DataSource dataSource,
 			com.dasigconnect.backend.repository.UserRepository userRepository,
