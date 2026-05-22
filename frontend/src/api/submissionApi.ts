@@ -12,6 +12,14 @@ export type SubmissionStatus =
   | 'admin_direct_post'
   | 'rejected'
 
+export interface SavedMediaAsset {
+  id: string
+  storageUrl: string
+  fileName: string
+  fileType: string
+  fileSizeBytes: number
+}
+
 export interface SubmissionSummary {
   id: string
   institutionId: string
@@ -27,6 +35,7 @@ export interface SubmissionSummary {
   mediaCount?: number
   category?: string
   tags?: string[]
+  mediaAssets?: SavedMediaAsset[]
 }
 
 export interface SubmissionPayload {
@@ -92,9 +101,21 @@ export function deleteDraft(id: string) {
 export async function uploadSubmissionMedia(id: string, files: File[]) {
   const responses = []
   for (const file of files) {
-    const storageUrl = await uploadToSupabaseStorage(id, file)
+    const { data: { signedUrl, publicUrl } } = await api.post<{ signedUrl: string; publicUrl: string; path: string }>(
+      `/submissions/${id}/media/upload-url`,
+      { fileName: safeFileName(file.name), fileType: fileTypeFromFile(file) },
+    )
+    const upload = await fetch(signedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    })
+    if (!upload.ok) {
+      const msg = await upload.text().catch(() => '')
+      throw new Error(msg || 'Supabase media upload failed.')
+    }
     responses.push(await api.post(`/submissions/${id}/media`, {
-      storageUrl,
+      storageUrl: publicUrl,
       fileName: file.name,
       fileType: fileTypeFromFile(file),
       fileSizeBytes: file.size,
@@ -111,35 +132,6 @@ export function validateGuardRails(scheduledAt: string) {
   return api.post<GuardRailResult>('/guardrails/validate', { scheduledAt })
 }
 
-async function uploadToSupabaseStorage(submissionId: string, file: File) {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-  const bucket = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !bucket || !anonKey) {
-    throw new Error('Supabase upload is not configured. Set VITE_SUPABASE_URL, VITE_SUPABASE_STORAGE_BUCKET, and VITE_SUPABASE_ANON_KEY.')
-  }
-
-  const path = `${submissionId}/${crypto.randomUUID()}-${safeFileName(file.name)}`
-  const uploadUrl = `${supabaseUrl.replace(/\/$/, '')}/storage/v1/object/${bucket}/${path}`
-  const response = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${anonKey}`,
-      apikey: anonKey,
-      'Content-Type': file.type || 'application/octet-stream',
-      'x-upsert': 'false',
-    },
-    body: file,
-  })
-
-  if (!response.ok) {
-    const message = await response.text().catch(() => '')
-    throw new Error(message || 'Supabase media upload failed.')
-  }
-
-  return `${supabaseUrl.replace(/\/$/, '')}/storage/v1/object/public/${bucket}/${path}`
-}
 
 function fileTypeFromFile(file: File) {
   const extension = file.name.split('.').pop()?.toLowerCase()
