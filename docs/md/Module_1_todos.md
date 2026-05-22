@@ -14,7 +14,7 @@ Module 1 is composed of:
 | M2 | UC-1.1 Backend Services | Completed |
 | M3 | UC-1.1 Frontend and Core Auth | Completed |
 | M4 | UC-1.2 and UC-1.3 Complex Backend Logic | Completed |
-| M5 | UC-1.3 Content Submission UI | Completed except Supabase upload credential verification |
+| M5 | UC-1.3 Content Submission UI | Completed except final browser upload flow verification |
 
 ## Completed
 
@@ -67,6 +67,14 @@ Module 1 is composed of:
 
 8. Local SMTP has been configured through ignored environment files. Production/staging still need team-owned SMTP values.
 
+9. Local Supabase configuration is in place:
+   - backend database connection through `DASIG_DATABASE_*`
+   - backend Supabase service config through `DASIG_SUPABASE_*`
+   - frontend direct upload config through `VITE_SUPABASE_*`
+   - shared storage bucket: `dasigconnect-media`
+
+10. Fresh Supabase database startup is fixed. Flyway baselines at version `0`, then applies V1 through V4 so Module 1 tables are created correctly.
+
 ## Verification
 
 - Backend focused auth/onboarding tests passed:
@@ -76,14 +84,11 @@ Module 1 is composed of:
   - `UserControllerTest`
 - Focused result: 50 tests, 0 failures, 0 errors.
 - Frontend build passed with `npm.cmd run build`.
+- Fresh Supabase DB startup passed: backend applied V1 through V4, then a second startup validated migrations with 0 pending migrations.
 
 ## Remaining Module 1 Gaps
 
-1. Supabase browser upload cannot be fully verified until the team lead provides Supabase access/credentials.
-   Required frontend variables:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_STORAGE_BUCKET`
-   - `VITE_SUPABASE_ANON_KEY`
+1. Supabase browser upload credentials are configured locally, but the actual upload path still needs manual verification through the submission form.
 
 2. Deployment runtime still needs team-owned credentials:
    - SMTP

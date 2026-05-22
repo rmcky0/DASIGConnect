@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.annotation.Value;
 import javax.sql.DataSource;
 import java.io.IOException;
 import java.sql.Connection;
@@ -53,13 +54,17 @@ public class BackendApplication {
 
 	@Bean
 	@ConditionalOnProperty(name = "spring.flyway.enabled", havingValue = "true", matchIfMissing = true)
-	public org.flywaydb.core.Flyway flyway(DataSource dataSource) {
+	public org.flywaydb.core.Flyway flyway(
+			DataSource dataSource,
+			@Value("${spring.flyway.baseline-on-migrate:true}") boolean baselineOnMigrate,
+			@Value("${spring.flyway.baseline-version:0}") String baselineVersion) {
 		System.out.println("==================================================");
 		System.out.println("INITIALIZING CUSTOM FLYWAY BEAN...");
 		org.flywaydb.core.Flyway flyway = org.flywaydb.core.Flyway.configure()
 				.dataSource(dataSource)
 				.locations("classpath:db/migration")
-				.baselineOnMigrate(true)
+				.baselineOnMigrate(baselineOnMigrate)
+				.baselineVersion(baselineVersion)
 				.load();
 		
 		System.out.println("Executing Flyway Migrations against Supabase...");

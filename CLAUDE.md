@@ -48,6 +48,9 @@ For local frontend-to-backend calls, create `frontend/.env.local`:
 
 ```env
 VITE_API_URL=http://localhost:8080/api/v1
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_STORAGE_BUCKET=dasigconnect-media
+VITE_SUPABASE_ANON_KEY=<supabase-anon-key>
 ```
 
 `frontend/.env.local` is intentionally ignored and should not be committed.
@@ -114,6 +117,9 @@ Current branch: `feature/uc13-submission-backend`.
 - `InstitutionController` exposes canonical `/api/v1/institutions` and legacy `/api/v1/admin/institutions`.
 - Flyway migration versions are unique after the UC-1.3 fix: `V3__ensure_institution_email_domain.sql` and `V4__media_assets.sql`.
 - Local datasource configuration supports `DASIG_DATABASE_*` overrides before falling back to standard `DATABASE_*` values and a local JDBC default.
+- Backend Supabase config supports `DASIG_SUPABASE_URL`, `DASIG_SUPABASE_SERVICE_ROLE_KEY`, and `DASIG_SUPABASE_STORAGE_BUCKET`.
+- Flyway fresh Supabase startup is fixed with baseline version `0`, allowing V1 through V4 to run on a new Supabase `public` schema.
+- Local frontend Supabase upload env values are configured through ignored `frontend/.env.local` for the `dasigconnect-media` bucket.
 
 ### Verification
 
@@ -121,6 +127,7 @@ Current branch: `feature/uc13-submission-backend`.
 - Backend focused auth/onboarding tests: 50 tests passing across `InvitationServiceTest`, `InvitationControllerTest`, `UserServiceTest`, and `UserControllerTest`.
 - Frontend: `npm.cmd run build` passing.
 - Migration sanity: `mvn clean` and `mvn -DskipTests package` passed after renaming the media migration from V3 to V4.
+- Fresh Supabase DB startup: backend applied V1 through V4 successfully, then a second startup validated migrations with 0 pending migrations.
 
 ### Known Gaps
 
@@ -131,8 +138,8 @@ Current branch: `feature/uc13-submission-backend`.
 - Analytics need UC-2.4 backend.
 - Calendar, auto-publish, manual fallback, AI captions, and recommendations need UC-3.x backend.
 - No built-in validator account exists. Use the administrator dashboard to invite validators, then accept the invitation and set a password.
-- Browser media upload verification is blocked until team Supabase access/credentials are available. Required frontend vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_STORAGE_BUCKET`, and `VITE_SUPABASE_ANON_KEY`.
-- Backend deployment runtime still needs team-owned SMTP and Supabase service credentials. Local SMTP is configured through ignored env files.
+- Browser media upload credentials are configured locally, but the full upload flow still needs manual verification through the submission form.
+- Backend deployment runtime still needs team-owned SMTP and Supabase service credentials. Local SMTP and Supabase values are configured through ignored env files.
 
 ---
 
@@ -191,6 +198,7 @@ See `TASKS.md` for the detailed task checklist and current gaps.
 - `BackendApplication` custom Flyway/diagnostic beans are gated by `spring.flyway.enabled`; tests depend on this isolation.
 - `MediaAsset.embedding` is not Hibernate-mapped because pgvector `VECTOR(1024)` is handled through native queries.
 - Media upload is direct-to-Supabase from the frontend, followed by backend metadata attach. The backend does not receive multipart file bytes for Module 1.
+- Fresh Supabase `public` schemas should baseline Flyway at version `0`, not `1`; otherwise V1 is skipped and Module 1 tables are never created.
 - Invitation links are treated as superseded when a fresh invite/resend is issued for the same email; do not leave multiple open invite links for one pending account.
 - The frontend should display institution names from `GET /api/v1/me`; email-domain guessing is only a fallback.
 - Do not increase HikariCP max pool size past 5 unless the Supabase plan/pooler changes.

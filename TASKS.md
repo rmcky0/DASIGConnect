@@ -48,6 +48,8 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: backend test suite passed with 163 tests.
 - Done: Flyway duplicate migration version conflict fixed; source and generated migrations now use unique versions `V1`, `V2`, `V3`, and `V4`.
 - Done: `mvn clean` and `mvn -DskipTests package` passed after the migration rename.
+- Done: fresh Supabase database startup fixed by baselining Flyway at version `0`; V1 through V4 apply correctly on a new Supabase `public` schema.
+- Done: backend starts successfully against the updated Supabase database on a temporary port after migrations are applied.
 - Note: `.\mvnw.cmd` fails in the current PowerShell environment; direct Maven from `.m2/wrapper/dists` was used successfully.
 
 ### Pending - Backend
@@ -99,7 +101,7 @@ Legend: Done / In Progress / Not Started / Deferred
 - Gap: notification badge/stream needs UC-2.3 SSE backend.
 - Gap: analytics dashboard needs UC-2.4 backend.
 - Gap: calendar, publishing, AI caption, and recommendation screens need UC-3.x backend.
-- Gap: Supabase browser upload cannot be fully verified until the team lead provides the Supabase URL, storage bucket, and anon key.
+- Gap: Supabase browser upload env is now configured locally, but the full upload flow still needs manual verification through the submission form.
 
 ### Frontend Verification
 - Done: `npm.cmd run build` passed.
@@ -108,6 +110,7 @@ Legend: Done / In Progress / Not Started / Deferred
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_STORAGE_BUCKET`
   - `VITE_SUPABASE_ANON_KEY`
+- Done locally: `frontend/.env.local` contains the Vite Supabase upload variables and uses the `dasigconnect-media` bucket.
 
 ---
 
@@ -121,4 +124,5 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: Module 1 auth/onboarding cleanup completed locally: `/me` hydration, pending invite count/list/resend UI, invite token superseding, and user-count tenant scope hardening.
 - In Progress: merge/code review path for `feature/uc13-submission-backend`.
 - Done locally: SMTP credentials are configured in ignored local environment files; deployment runtime still needs team-owned SMTP values.
-- Not Started: configure Supabase service/browser upload environment variables in deployed environments; blocked until team lead provides Supabase access/credentials.
+- Done locally: Supabase database, service-role, frontend upload, and storage bucket env values are configured in ignored env files.
+- Not Started: configure Supabase service/browser upload environment variables in deployed environments.
