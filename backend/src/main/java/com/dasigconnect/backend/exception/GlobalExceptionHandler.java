@@ -2,11 +2,14 @@ package com.dasigconnect.backend.exception;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -32,6 +35,27 @@ public class GlobalExceptionHandler {
         }
         return ResponseEntity.badRequest()
                 .body(Map.of("error", "Validation failed", "status", 400, "fields", fieldErrors));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<Map<String, Object>> handleMissingRequestParameter(
+            MissingServletRequestParameterException ex) {
+        return ResponseEntity.badRequest()
+                .body(Map.of(
+                        "error", "Missing required request parameter: " + ex.getParameterName(),
+                        "status", 400));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest()
+                .body(Map.of("error", ex.getMessage(), "status", 400));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleDataIntegrity(DataIntegrityViolationException ex) {
+        return ResponseEntity.status(409)
+                .body(Map.of("error", "Duplicate or invalid data", "status", 409));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
