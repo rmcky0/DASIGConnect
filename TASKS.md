@@ -37,11 +37,14 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: DTOs for create/update/response/summary/lookups/slot evaluation/media attachment.
 - Done: `SubmissionService` - create draft, update, delete, submit, evaluate slot, list, attach uploaded media, attach media asset.
 - Done: `SubmissionController` - endpoints on `/api/v1/submissions`.
+- Done locally: guard rail enforcement is now configurable with `APP_GUARDRAILS_ENFORCED`; local default is `false` so testing can save drafts and submit for review without GR-H1/GR-H2/GR-H3 blocking.
+- Done locally: guard rail violations now return a structured `422` response instead of a generic internal server error.
 - Done: required tests before merge:
   - `SubmissionServiceTest`
   - `SubmissionControllerTest`
   - `UserServiceTest`
   - `UserControllerTest`
+- Gap: save draft / submit-for-review still needs browser-level debugging and verification. The testing bypass and frontend payload defaults are in place, but the team has not yet confirmed the full flow works end to end in the UI.
 - Deferred: `POST /api/v1/submissions/{id}/override-request`; implement in Module 3 with override request migration/service.
 
 ### Backend Verification
@@ -87,6 +90,10 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: guard rail panel wired to `POST /api/v1/submissions/{id}/evaluate-slot`.
 - Done: media upload now follows the backend contract: direct Supabase Storage upload, then metadata attach to `POST /api/v1/submissions/{id}/media`.
 - Done: backend lookup shape wired for allowed file types, file size, media count, and schedule windows.
+- Done locally: `.jpg` uploads are normalized to backend-supported `jpeg`.
+- Done locally: submission queue has been restyled into a clearer left-side queue panel with count, stronger item containers, active state, and improved spacing.
+- Done locally: submit buttons are not disabled by readiness score during testing.
+- Gap: save draft and submit-for-review are still treated as unresolved until the browser flow is manually verified against the active backend/Supabase environment.
 
 ### Dashboard
 - Done: stat tiles use live endpoints where available: submissions, institutions, user counts, and pending invitation counts.
@@ -95,6 +102,8 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: current user state hydrates from `GET /api/v1/me` after login, invite accept, session relogin, and saved-token restore.
 
 ### Pending - Frontend
+- Gap: submission queue design improved locally but still needs user/team review against real data and mobile widths.
+- Gap: save draft / submit review still needs final UI-level debugging; current local changes are intended to unblock testing but are not yet proven end to end.
 - Gap: category/tag/preferred-time selection is limited because backend lookups do not currently return those fields.
 - Gap: `AssetPickerModal` cannot be fully wired until UC-2.2 media asset list/delete endpoints exist.
 - Gap: validator review actions need UC-2.1 backend.

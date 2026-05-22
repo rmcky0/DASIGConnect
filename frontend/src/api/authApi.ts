@@ -103,6 +103,10 @@ export function listUsers(institutionId: string) {
   })
 }
 
+export function updateUserStatus(id: string, accountState: 'active' | 'inactive') {
+  return api.patch<UserProfileResponse>(`/users/${id}/status`, { accountState })
+}
+
 export interface PendingInvitationResponse {
   id: string
   recipientEmail: string

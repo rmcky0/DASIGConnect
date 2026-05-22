@@ -58,6 +58,19 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", "Duplicate or invalid data", "status", 409));
     }
 
+    @ExceptionHandler(GuardRailViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleGuardRailViolation(GuardRailViolationException ex) {
+        String message = ex.getViolations().isEmpty()
+                ? ex.getMessage()
+                : ex.getViolations().get(0).getMessage();
+        return ResponseEntity.unprocessableEntity()
+                .body(Map.of(
+                        "error", message,
+                        "summary", ex.getMessage(),
+                        "status", 422,
+                        "violations", ex.getViolations()));
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public void handleAccessDenied(AccessDeniedException ex) throws AccessDeniedException {
         throw ex;

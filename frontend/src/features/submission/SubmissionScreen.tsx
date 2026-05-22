@@ -87,6 +87,11 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     [submissions],
   )
 
+  const submittedCount = useMemo(
+    () => submissions.filter((item) => item.status !== 'draft').length,
+    [submissions],
+  )
+
   const scheduledAt = useMemo(() => {
     if (!form.scheduledDate || !form.scheduledTime) return undefined
     const date = new Date(`${form.scheduledDate}T${form.scheduledTime}`)
@@ -239,20 +244,26 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       <div className="sub-workspace">
         <aside className="sub-sidebar">
           <div className="sub-sidebar-header">
-            <div className="sub-sidebar-title">Submission Queue</div>
+            <div className="sub-sidebar-title-row">
+              <div>
+                <div className="sub-sidebar-eyebrow">Workspace</div>
+                <div className="sub-sidebar-title">Submission Queue</div>
+              </div>
+              <div className="sub-sidebar-count">{queued.length}</div>
+            </div>
             <div className="sub-sidebar-tabs">
               <button className={`sub-stab ${filter === 'drafts' ? 'active' : ''}`} type="button" onClick={() => setFilter('drafts')}>
                 Drafts {draftCount > 0 && <span>{draftCount}</span>}
               </button>
               <button className={`sub-stab ${filter === 'submitted' ? 'active' : ''}`} type="button" onClick={() => setFilter('submitted')}>
-                Submitted
+                Submitted {submittedCount > 0 && <span>{submittedCount}</span>}
               </button>
               <button className={`sub-stab ${filter === 'all' ? 'active' : ''}`} type="button" onClick={() => setFilter('all')}>
                 All
               </button>
             </div>
           </div>
-          <div className="sub-sidebar-list">
+          <div className="sub-sidebar-list" aria-label="Submission queue">
             {loading && <QueueState icon="ti-loader-2 sub-spin" title="Loading submissions" />}
             {!loading && error && (
               <QueueState
@@ -308,7 +319,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
               <button className="sub-btn-ghost" type="button" onClick={() => void handleSave()}>
                 <i className="ti ti-device-floppy"></i> Save Draft
               </button>
-              <button className="sub-btn-primary" type="button" onClick={() => setModal('submit')} disabled={readiness.score < 60}>
+              <button className="sub-btn-primary" type="button" onClick={() => setModal('submit')}>
                 <i className="ti ti-send"></i> Submit for Review
               </button>
             </div>
@@ -423,7 +434,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           </section>
 
           <section className="sub-form-section">
-            <SectionHead icon="ti-calendar-event" tone="purple" title="Preferred Schedule" subtitle="Guardrails validate the requested slot when both fields are set." />
+            <SectionHead icon="ti-calendar-event" tone="purple" title="Preferred Schedule" subtitle="Testing mode allows draft save and submit while guardrails are being tuned." />
             <div className="sub-field-row">
               <Field label="Preferred Date">
                 <input className="sub-finput" type="date" value={form.scheduledDate} onChange={(event) => updateField('scheduledDate', event.target.value)} />
@@ -460,9 +471,9 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           <GuardSection title="Scheduling" icon="ti-calendar">
             <CheckItem pass={Boolean(scheduledAt)} title="Preferred slot selected" sub={scheduledAt ? formatDateTime(scheduledAt) : 'Select date and time'} />
             {guardRails ? (
-              <CheckItem pass={!guardRails.blocked} title="Slot confirmation" sub={guardRails.clean ? 'Guardrails passed' : `${guardRails.hardBlocks.length} blocking issue(s)`} />
+              <CheckItem pass title="Slot confirmation" sub={guardRails.clean ? 'Guardrails passed' : `Testing override: ${guardRails.hardBlocks.length} issue(s) noted`} />
             ) : (
-              <CheckItem pass={false} idle title="Slot confirmation" sub="Awaiting backend guardrail response" />
+              <CheckItem pass idle title="Slot confirmation" sub="Testing override active" />
             )}
           </GuardSection>
 
@@ -488,7 +499,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           </div>
 
           <div className="sub-guard-actions">
-            <button className="sub-guard-submit-btn" type="button" onClick={() => setModal('submit')} disabled={readiness.score < 60}>
+            <button className="sub-guard-submit-btn" type="button" onClick={() => setModal('submit')}>
               <i className="ti ti-send"></i> Submit for Review
             </button>
             <button className="sub-guard-save-btn" type="button" onClick={() => void handleSave()}>
@@ -502,7 +513,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         <ConfirmModal
           icon="ti-send"
           title="Submit for Review?"
-          description={`This submission will be sent to your institution's Validator. Readiness score: ${readiness.score} / 100.`}
+          description={`This submission will be sent to your institution's Validator. Testing mode will not block low readiness or guard rail warnings. Readiness score: ${readiness.score} / 100.`}
           cancelLabel="Go Back"
           confirmLabel={submitting ? 'Submitting...' : 'Confirm Submission'}
           onCancel={() => setModal(null)}
@@ -664,8 +675,8 @@ function BrandMark() {
 
 function toPayload(form: FormState, scheduledAt?: string): SubmissionPayload {
   return {
-    eventTitle: form.eventTitle.trim(),
-    eventDate: form.eventDate,
+    eventTitle: form.eventTitle.trim() || 'Untitled submission',
+    eventDate: form.eventDate || new Date().toISOString().slice(0, 10),
     caption: form.caption.trim(),
     description: form.description.trim(),
     scheduledAt,
@@ -747,6 +758,10 @@ function toastIcon(type: 'success' | 'info' | 'err' | 'warn') {
 
 function isAllowedFile(file: File, allowedFileTypes: string[]) {
   if (allowedFileTypes.length === 0) return true
-  const extension = file.name.split('.').pop()?.toLowerCase()
+  const extension = normalizeFileType(file.name.split('.').pop()?.toLowerCase() || '')
   return Boolean(extension && allowedFileTypes.includes(extension))
+}
+
+function normalizeFileType(fileType: string) {
+  return fileType === 'jpg' ? 'jpeg' : fileType
 }

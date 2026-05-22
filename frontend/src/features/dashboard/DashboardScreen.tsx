@@ -1,6 +1,7 @@
 import { useState, useEffect, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Screen from '../../components/layout/Screen'
+import UserManagementPanel from '../../components/users/UserManagementPanel'
 import type { User } from '../../types/auth.types'
 import {
   createInstitution,
@@ -11,6 +12,7 @@ import {
   listPendingInvitations,
   listUsers,
   resendInvitation,
+  updateUserStatus,
 } from '../../api/authApi'
 import type { PendingInvitationResponse, UserProfileResponse } from '../../api/authApi'
 import { listSubmissions, type SubmissionSummary } from '../../api/submissionApi'
@@ -226,6 +228,8 @@ export default function DashboardScreen({
   const [managementLoading, setManagementLoading] = useState(false)
   const [managementError, setManagementError] = useState('')
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null)
+  const [selectedManagedUserId, setSelectedManagedUserId] = useState<string | null>(null)
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
 
   useEffect(() => {
     if (institutions.length > 0 && !inviteSelectedInstId) {
@@ -249,6 +253,7 @@ export default function DashboardScreen({
     setPendingInvitations([])
     setManagedUsers([])
     setManagementError('')
+    setSelectedManagedUserId(null)
   }
 
   const handleProvisionInstitution = async (e: React.FormEvent) => {
@@ -327,6 +332,34 @@ export default function DashboardScreen({
       return
     }
 
+    if (inviteRole === 'validator') {
+      let usersForWarning = managedUsers
+      try {
+        const usersResponse = await listUsers(inviteSelectedInstId)
+        usersForWarning = usersResponse.data
+        setManagedUsers(usersResponse.data)
+      } catch {
+        usersForWarning = managedUsers
+      }
+
+      const activeValidators = usersForWarning.filter(
+        (managedUser) =>
+          managedUser.role.toLowerCase() === 'validator' &&
+          managedUser.accountState.toLowerCase() === 'active',
+      )
+      if (activeValidators.length > 0) {
+        const institutionName =
+          institutions.find((institution) => institution.id === inviteSelectedInstId)?.name ||
+          'this institution'
+        const shouldContinue = window.confirm(
+          `${institutionName} already has ${activeValidators.length} active validator${
+            activeValidators.length === 1 ? '' : 's'
+          }. Do you still want to invite another validator?`,
+        )
+        if (!shouldContinue) return
+      }
+    }
+
     setInviteLoading(true)
 
     const success: string[] = []
@@ -387,6 +420,37 @@ export default function DashboardScreen({
     }
   }
 
+  const handleToggleUserStatus = async (managedUser: UserProfileResponse) => {
+    const normalizedState = managedUser.accountState.toLowerCase()
+    const nextState = normalizedState === 'inactive' ? 'active' : 'inactive'
+    const verb = nextState === 'inactive' ? 'deactivate' : 'reactivate'
+
+    if (!window.confirm(`Are you sure you want to ${verb} ${managedUser.email}?`)) {
+      return
+    }
+
+    setUpdatingUserId(managedUser.id)
+    setManagementError('')
+    try {
+      const response = await updateUserStatus(managedUser.id, nextState)
+      setManagedUsers((current) =>
+        current.map((item) => (item.id === managedUser.id ? response.data : item)),
+      )
+      if (inviteSelectedInstId) {
+        const countsResponse = await getUserCounts(inviteSelectedInstId)
+        setDashboardStats((current) => ({
+          ...current,
+          contributors: countsResponse.data.contributors,
+          validators: countsResponse.data.validators,
+        }))
+      }
+    } catch (err: any) {
+      setManagementError(getApiErrorMessage(err, `Unable to ${verb} user.`))
+    } finally {
+      setUpdatingUserId(null)
+    }
+  }
+
   async function loadManagementLists(institutionId: string) {
     setManagementLoading(true)
     setManagementError('')
@@ -396,10 +460,16 @@ export default function DashboardScreen({
         listPendingInvitations(institutionId),
       ])
       setManagedUsers(usersResponse.data)
+      setSelectedManagedUserId((current) =>
+        current && usersResponse.data.some((managedUser) => managedUser.id === current)
+          ? current
+          : null,
+      )
       setPendingInvitations(pendingResponse.data)
     } catch (err: any) {
       setManagedUsers([])
       setPendingInvitations([])
+      setSelectedManagedUserId(null)
       setManagementError(getApiErrorMessage(err, 'Unable to load users and invitations.'))
     } finally {
       setManagementLoading(false)
@@ -431,6 +501,7 @@ export default function DashboardScreen({
       setOpenModal('institution')
     }
   }
+
   return (
     <Screen id="dashboard" active={active}>
       <div id="screen-dashboard" style={{ background: 'var(--d-bg)' }}>
@@ -914,37 +985,15 @@ export default function DashboardScreen({
                         )}
                       </section>
 
-                      <section className="dash-management-panel">
-                        <div className="dash-management-head">
-                          <div>
-                            <div className="dash-management-title">Users</div>
-                            <div className="dash-management-sub">
-                              {managedUsers.length} account{managedUsers.length === 1 ? '' : 's'} in this institution
-                            </div>
-                          </div>
-                        </div>
-                        {managementLoading ? (
-                          <div className="dash-empty-row">Loading users...</div>
-                        ) : managedUsers.length === 0 ? (
-                          <div className="dash-empty-row">No users found.</div>
-                        ) : (
-                          <div className="dash-compact-list">
-                            {managedUsers.map((managedUser) => (
-                              <div className="dash-compact-row" key={managedUser.id}>
-                                <div>
-                                  <div className="dash-compact-primary">{managedUser.email}</div>
-                                  <div className="dash-compact-meta">
-                                    {formatRoleLabel(managedUser.role)} · {formatAccountState(managedUser.accountState)}
-                                  </div>
-                                </div>
-                                <span className={`dash-state-pill ${stateClass(managedUser.accountState)}`}>
-                                  {formatAccountState(managedUser.accountState)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </section>
+                      <UserManagementPanel
+                        currentUser={user}
+                        users={managedUsers}
+                        loading={managementLoading}
+                        selectedUserId={selectedManagedUserId}
+                        updatingUserId={updatingUserId}
+                        onSelectUser={setSelectedManagedUserId}
+                        onToggleUserStatus={(managedUser) => void handleToggleUserStatus(managedUser)}
+                      />
                     </div>
 
                     {managementError && (
@@ -1221,22 +1270,6 @@ function formatDate(value: string) {
     month: 'short',
     day: 'numeric',
   })
-}
-
-function formatAccountState(value: string) {
-  return value
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function stateClass(value: string) {
-  const normalized = value.toLowerCase()
-  if (normalized.includes('inactive')) return 'state-muted'
-  if (normalized.includes('active')) return 'state-active'
-  if (normalized.includes('undelivered')) return 'state-warning'
-  if (normalized.includes('pending')) return 'state-pending'
-  return 'state-muted'
 }
 
 function normalizeDomain(domain: string) {

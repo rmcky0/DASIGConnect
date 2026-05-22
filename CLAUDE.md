@@ -120,10 +120,14 @@ Current branch: `feature/uc13-submission-backend`.
 - Backend Supabase config supports `DASIG_SUPABASE_URL`, `DASIG_SUPABASE_SERVICE_ROLE_KEY`, and `DASIG_SUPABASE_STORAGE_BUCKET`.
 - Flyway fresh Supabase startup is fixed with baseline version `0`, allowing V1 through V4 to run on a new Supabase `public` schema.
 - Local frontend Supabase upload env values are configured through ignored `frontend/.env.local` for the `dasigconnect-media` bucket.
+- Guard rail enforcement is now configurable through `APP_GUARDRAILS_ENFORCED`; local default is `false` to keep save draft / submit-for-review testing unblocked while scheduling rules are tuned.
+- `GuardRailViolationException` now returns a structured `422` payload instead of falling through as a generic internal server error.
+- Submission queue UI has been restyled into a clearer queue panel, and frontend `.jpg` file checks/upload metadata now normalize to `jpeg`.
 
 ### Verification
 
-- Backend: 163 tests passing.
+- Backend: 163 tests passing from the full prior suite.
+- Backend focused submission verification: 42 tests passing across `SlotReservationServiceTest`, `SubmissionServiceTest`, and `SubmissionControllerTest`.
 - Backend focused auth/onboarding tests: 50 tests passing across `InvitationServiceTest`, `InvitationControllerTest`, `UserServiceTest`, and `UserControllerTest`.
 - Frontend: `npm.cmd run build` passing.
 - Migration sanity: `mvn clean` and `mvn -DskipTests package` passed after renaming the media migration from V3 to V4.
@@ -131,6 +135,8 @@ Current branch: `feature/uc13-submission-backend`.
 
 ### Known Gaps
 
+- Save draft / submit-for-review remains the active Module 1 blocker until the browser flow is manually verified against the current backend and Supabase environment. The testing bypass and frontend payload defaults are in place, but the issue is not considered closed.
+- Submission queue design has been improved locally, but still needs review with real queue data and responsive/mobile widths.
 - Submission lookups do not return categories, tags, or preferred time slots.
 - Media library / asset picker needs UC-2.2 backend: `GET/DELETE /api/v1/media-assets`.
 - Validator review actions need UC-2.1 backend.

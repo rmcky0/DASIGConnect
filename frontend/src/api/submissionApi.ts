@@ -137,9 +137,13 @@ async function uploadToSupabaseStorage(submissionId: string, file: File) {
 
 function fileTypeFromFile(file: File) {
   const extension = file.name.split('.').pop()?.toLowerCase()
-  if (extension) return extension
+  if (extension) return normalizeFileType(extension)
   const subtype = file.type.split('/')[1]?.toLowerCase()
-  return subtype || 'jpeg'
+  return normalizeFileType(subtype || 'jpeg')
+}
+
+function normalizeFileType(fileType: string) {
+  return fileType === 'jpg' ? 'jpeg' : fileType
 }
 
 function safeFileName(fileName: string) {

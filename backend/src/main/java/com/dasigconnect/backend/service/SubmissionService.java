@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,6 +64,9 @@ public class SubmissionService {
 
     @PersistenceContext
     private EntityManager entityManager;
+
+    @Value("${app.guardrails.enforced:true}")
+    private boolean guardRailsEnforced = true;
 
     public SubmissionService(
             SubmissionRepository submissionRepository,
@@ -165,16 +169,21 @@ public class SubmissionService {
                             + submission.getStatus());
         }
 
-        if (submission.getScheduledAt() == null) {
+        if (guardRailsEnforced && submission.getScheduledAt() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "A scheduled time must be selected before submitting.");
         }
 
         // Re-run guard rails — slot may have been taken since draft was saved
-        GuardRailResult result = guardRailService.validate(user.institutionId(), submission.getScheduledAt());
-        if (result.isBlocked()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Guard rail violation: " + result.getHardBlocks().get(0).getMessage());
+        if (guardRailsEnforced && submission.getScheduledAt() != null) {
+            GuardRailResult result = guardRailService.validate(user.institutionId(), submission.getScheduledAt());
+            if (result.isBlocked()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Guard rail violation: " + result.getHardBlocks().get(0).getMessage());
+            }
+        } else {
+            log.info("Guard rail enforcement disabled; submitting {} without blocking slot validation.",
+                    submissionId);
         }
 
         submission.setStatus(SubmissionStatus.pending);

@@ -1,7 +1,9 @@
 package com.dasigconnect.backend.controller;
 
 import com.dasigconnect.backend.config.SecurityConfig;
+import com.dasigconnect.backend.exception.GuardRailViolationException;
 import com.dasigconnect.backend.model.dto.guardrail.GuardRailResult;
+import com.dasigconnect.backend.model.dto.guardrail.GuardRailViolation;
 import com.dasigconnect.backend.model.dto.submission.SubmissionResponseDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionSummaryDto;
 import com.dasigconnect.backend.model.entity.Institution;
@@ -135,6 +137,26 @@ class SubmissionControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(submissionId.toString()));
+    }
+
+    @Test
+    @WithMockUser(roles = "CONTRIBUTOR")
+    void update_guardRailViolation_returns422WithViolations() throws Exception {
+        UUID submissionId = UUID.randomUUID();
+        when(submissionService.update(any(), any(), any()))
+                .thenThrow(new GuardRailViolationException(List.of(
+                        new GuardRailViolation("GR-H2", "Scheduled time must be at least 2 hours from now."))));
+
+        mockMvc.perform(patch("/api/v1/submissions/{id}", submissionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scheduledAt":"2026-06-01T08:00:00Z"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.status").value(422))
+                .andExpect(jsonPath("$.error").value("Scheduled time must be at least 2 hours from now."))
+                .andExpect(jsonPath("$.summary").value("Slot rejected: GR-H2"))
+                .andExpect(jsonPath("$.violations[0].code").value("GR-H2"));
     }
 
     @Test
