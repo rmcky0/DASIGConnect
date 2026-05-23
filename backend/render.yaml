@@ -4,6 +4,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    healthCheckPath: /health
     envVars:
       # Database
       - key: DASIG_DATABASE_URL
