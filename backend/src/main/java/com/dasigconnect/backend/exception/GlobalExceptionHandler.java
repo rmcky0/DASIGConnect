@@ -14,6 +14,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -69,6 +70,12 @@ public class GlobalExceptionHandler {
                         "summary", ex.getMessage(),
                         "status", 422,
                         "violations", ex.getViolations()));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResourceFound(NoResourceFoundException ex) {
+        return ResponseEntity.status(404)
+                .body(Map.of("error", "Not found", "status", 404));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
