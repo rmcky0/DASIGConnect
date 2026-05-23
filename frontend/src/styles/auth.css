@@ -351,6 +351,17 @@ html,body{height:100%;font-family:var(--ff-body);-webkit-font-smoothing:antialia
   height: 100vh;
   z-index: 90;
 }
+.dash-shell {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar-link[aria-disabled="true"] {
+  cursor: default;
+}
+.sidebar-link[aria-disabled="true"]:hover {
+  background: none;
+  color: var(--d-muted);
+}
 .sidebar-brand-wrapper {
   display: flex;
   align-items: center;
@@ -433,7 +444,7 @@ html,body{height:100%;font-family:var(--ff-body);-webkit-font-smoothing:antialia
 .udrop-item i{font-size:15px}
 .udrop-sep{height:1px;background:var(--d-border);margin:4px 0}
 
-.dash-body{padding:32px 32px 80px;max-width:1080px;margin:0 auto;width:100%}
+.dash-body{padding:30px 32px 80px;max-width:1200px;margin:0 auto;width:100%}
 .dash-page-header{margin-bottom:24px}
 .dash-greeting{font-family:var(--ff-display);font-size:26px;font-weight:600;color:var(--d-text);margin-bottom:3px}
 .dash-subline{font-size:13px;color:var(--d-muted)}

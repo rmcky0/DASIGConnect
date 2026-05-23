@@ -14,6 +14,7 @@ import {
 } from '../../api/submissionApi'
 import { useSubmissionLookups, useSubmissions } from '../../hooks/useSubmissions'
 import type { User } from '../../types/auth.types'
+import { useToast } from '../../context/ToastContext'
 
 interface SubmissionScreenProps {
   user: User
@@ -66,11 +67,11 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const navigate = useNavigate()
   const { submissions, setSubmissions, loading, error, refresh } = useSubmissions()
   const { lookups, loading: lookupsLoading, error: lookupsError } = useSubmissionLookups()
+  const toast = useToast()
   const [filter, setFilter] = useState<QueueFilter>('drafts')
   const [selectedFileIndex, setSelectedFileIndex] = useState(0)
   const [form, setForm] = useState<FormState>(initialForm)
   const [saveState, setSaveState] = useState<SaveState>('idle')
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'err' | 'warn' } | null>(null)
   const [modal, setModal] = useState<ModalState>(null)
   const [submitting, setSubmitting] = useState(false)
   const [guardRails, setGuardRails] = useState<GuardRailResult | null>(null)
@@ -124,12 +125,6 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     return () => window.clearTimeout(timer)
   }, [scheduledAt, form.id])
 
-  useEffect(() => {
-    if (!toast) return
-    const timer = window.setTimeout(() => setToast(null), 2800)
-    return () => window.clearTimeout(timer)
-  }, [toast])
-
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }))
     setSaveState('idle')
@@ -148,7 +143,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       tags: [],
       files: [],
     })
-    setToast({ message: 'Submission loaded', type: 'info' })
+    // Selection acknowledged — no toast needed (content loads visually)
   }
 
   async function handleSave() {
@@ -162,10 +157,10 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       setForm((current) => ({ ...current, id: response.data.id, files: [] }))
       setSubmissions((current) => upsertSubmission(current, response.data))
       setSaveState('saved')
-      setToast({ message: 'Draft saved successfully', type: 'success' })
+      toast.success('Draft saved.')
     } catch (err: any) {
       setSaveState('idle')
-      setToast({ message: err.response?.data?.error || err.message || 'Draft could not be saved.', type: 'err' })
+      toast.error(err.response?.data?.error || err.message || 'Draft could not be saved.')
     }
   }
 
@@ -181,10 +176,10 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       setSubmissions((current) => upsertSubmission(current, submitted.data))
       setForm((current) => ({ ...current, id: submitted.data.id, files: [] }))
       setModal('success')
-      setToast({ message: 'Submission sent for review', type: 'success' })
+      toast.success('Submission sent for review.')
       void refresh()
     } catch (err: any) {
-      setToast({ message: err.response?.data?.error || err.message || 'Submission failed.', type: 'err' })
+      toast.error(err.response?.data?.error || err.message || 'Submission failed.')
     } finally {
       setSubmitting(false)
     }
@@ -202,9 +197,9 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       setSubmissions((current) => current.filter((item) => item.id !== form.id))
       setForm(initialForm)
       setModal(null)
-      setToast({ message: 'Draft deleted', type: 'info' })
+      toast.info('Draft deleted.')
     } catch (err: any) {
-      setToast({ message: err.response?.data?.error || err.message || 'Draft could not be deleted.', type: 'err' })
+      toast.error(err.response?.data?.error || err.message || 'Draft could not be deleted.')
     }
   }
 
@@ -542,12 +537,6 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           onConfirm={() => void handleDelete()}
         />
       )}
-      {toast && (
-        <div className={`sub-toast ${toast.type}`}>
-          <i className={`ti ${toastIcon(toast.type)}`}></i>
-          {toast.message}
-        </div>
-      )}
     </div>
   )
 }
@@ -747,13 +736,6 @@ function formatTimeInput(value: string) {
 function formatRole(role: User['role']) {
   if (role === 'admin') return 'Administrator'
   return role.charAt(0).toUpperCase() + role.slice(1)
-}
-
-function toastIcon(type: 'success' | 'info' | 'err' | 'warn') {
-  if (type === 'success') return 'ti-circle-check'
-  if (type === 'err') return 'ti-alert-circle'
-  if (type === 'warn') return 'ti-alert-triangle'
-  return 'ti-info-circle'
 }
 
 function isAllowedFile(file: File, allowedFileTypes: string[]) {

@@ -1,32 +1,16 @@
 import { useState, useEffect, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Screen from '../../components/layout/Screen'
-import UserManagementPanel from '../../components/users/UserManagementPanel'
 import type { User } from '../../types/auth.types'
 import {
   createInstitution,
   getPendingInvitationCount,
   getUserCounts,
-  inviteUser,
   listInstitutions,
-  listPendingInvitations,
-  listUsers,
-  resendInvitation,
-  updateUserStatus,
 } from '../../api/authApi'
-import type { PendingInvitationResponse, UserProfileResponse } from '../../api/authApi'
 import { listSubmissions, type SubmissionSummary } from '../../api/submissionApi'
 
 interface DashboardScreenProps {
-  active: boolean
-  user: User | null
-  showBanner: boolean
-  bannerTime: string
-  showDropdown: boolean
-  onToggleDropdown: () => void
-  onDismissBanner: () => void
-  onStayLoggedIn: () => void
-  onLogout: () => void
+  user: User
 }
 
 interface StatItem {
@@ -67,24 +51,12 @@ interface DashboardStats {
 
 const emptyContributorActivity: ActivityItem[] = []
 
-export default function DashboardScreen({
-  active,
-  user,
-  showBanner,
-  bannerTime,
-  showDropdown,
-  onToggleDropdown,
-  onDismissBanner,
-  onStayLoggedIn,
-  onLogout,
-}: DashboardScreenProps) {
+export default function DashboardScreen({ user }: DashboardScreenProps) {
   const navigate = useNavigate()
-  const [openModal, setOpenModal] = useState<'institution' | 'invite' | null>(null)
+  const [openModal, setOpenModal] = useState<'institution' | null>(null)
   const [institutions, setInstitutions] = useState<
     { id: string; name: string; code: string; emailDomain: string }[]
   >([])
-  const [institutionsLoading, setInstitutionsLoading] = useState(false)
-  const [institutionsError, setInstitutionsError] = useState('')
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     submissions: [],
     contributors: 0,
@@ -102,13 +74,9 @@ export default function DashboardScreen({
           emailDomain: '',
         },
       ])
-      setInviteSelectedInstId(user.institutionId)
-      setInviteRole('contributor')
       return
     }
     if (user?.role !== 'admin') return
-    setInstitutionsLoading(true)
-    setInstitutionsError('')
     listInstitutions()
       .then((response) => {
         const mapped = response.data.map((item) => ({
@@ -119,12 +87,9 @@ export default function DashboardScreen({
         }))
         setInstitutions(mapped)
       })
-      .catch((err: any) => {
-        setInstitutionsError(
-          getApiErrorMessage(err, 'Unable to load institutions. Please refresh.'),
-        )
+      .catch(() => {
+        setInstitutions([])
       })
-      .finally(() => setInstitutionsLoading(false))
   }, [user?.role, user?.institutionId, user?.inst])
 
   useEffect(() => {
@@ -214,46 +179,12 @@ export default function DashboardScreen({
   const [instError, setInstError] = useState('')
   const [instSuccess, setInstSuccess] = useState<{ id: string; name: string; code: string } | null>(null)
 
-  const [inviteRole, setInviteRole] = useState<'contributor' | 'validator'>('contributor')
-  const [inviteEmailsText, setInviteEmailsText] = useState('')
-  const [inviteSelectedInstId, setInviteSelectedInstId] = useState('')
-  const [inviteLoading, setInviteLoading] = useState(false)
-  const [inviteResults, setInviteResults] = useState<{
-    total: number
-    success: string[]
-    failed: { email: string; reason: string }[]
-  } | null>(null)
-  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitationResponse[]>([])
-  const [managedUsers, setManagedUsers] = useState<UserProfileResponse[]>([])
-  const [managementLoading, setManagementLoading] = useState(false)
-  const [managementError, setManagementError] = useState('')
-  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null)
-  const [selectedManagedUserId, setSelectedManagedUserId] = useState<string | null>(null)
-  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (institutions.length > 0 && !inviteSelectedInstId) {
-      setInviteSelectedInstId(institutions[0].id)
-    }
-  }, [institutions, inviteSelectedInstId])
-
-  useEffect(() => {
-    if (openModal !== 'invite' || !inviteSelectedInstId) return
-    void loadManagementLists(inviteSelectedInstId)
-  }, [openModal, inviteSelectedInstId])
-
   const handleCloseModals = () => {
     setOpenModal(null)
     setInstName('')
     setInstDomain('')
     setInstError('')
     setInstSuccess(null)
-    setInviteEmailsText('')
-    setInviteResults(null)
-    setPendingInvitations([])
-    setManagedUsers([])
-    setManagementError('')
-    setSelectedManagedUserId(null)
   }
 
   const handleProvisionInstitution = async (e: React.FormEvent) => {
@@ -285,11 +216,10 @@ export default function DashboardScreen({
       }
       const updated = [...institutions, { ...newInst, emailDomain: response.data.emailDomain }]
       setInstitutions(updated)
-      setInviteSelectedInstId(newInst.id)
       setInstSuccess(newInst)
       setInstName('')
       setInstDomain('')
-    } catch (err: any) {
+    } catch (err: unknown) {
       setInstError(
         getApiErrorMessage(err, 'An error occurred while provisioning the workspace.')
       )
@@ -298,203 +228,17 @@ export default function DashboardScreen({
     }
   }
 
-  const handleSendInvitations = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setInviteResults(null)
-
-    const rawEmails = inviteEmailsText
-      .split(/[\s,\n]+/)
-      .map((email) => email.trim())
-      .filter((email) => email.length > 0)
-    const inviteEmails = Array.from(new Set(rawEmails.map((email) => email.toLowerCase())))
-
-    if (inviteEmails.length === 0) {
-      alert('Please enter at least one recipient email address.')
-      return
-    }
-
-    if (!inviteSelectedInstId) {
-      alert('Please select or provision an institution first.')
-      return
-    }
-
-    if (inviteEmails.length > 15) {
-      setInviteResults({
-        total: inviteEmails.length,
-        success: [],
-        failed: [
-          {
-            email: 'Batch Error',
-            reason: 'The batch exceeds the maximum allowed size of 15 invitations. The entire batch is rejected.',
-          },
-        ],
-      })
-      return
-    }
-
-    if (inviteRole === 'validator') {
-      let usersForWarning = managedUsers
-      try {
-        const usersResponse = await listUsers(inviteSelectedInstId)
-        usersForWarning = usersResponse.data
-        setManagedUsers(usersResponse.data)
-      } catch {
-        usersForWarning = managedUsers
-      }
-
-      const activeValidators = usersForWarning.filter(
-        (managedUser) =>
-          managedUser.role.toLowerCase() === 'validator' &&
-          managedUser.accountState.toLowerCase() === 'active',
-      )
-      if (activeValidators.length > 0) {
-        const institutionName =
-          institutions.find((institution) => institution.id === inviteSelectedInstId)?.name ||
-          'this institution'
-        const shouldContinue = window.confirm(
-          `${institutionName} already has ${activeValidators.length} active validator${
-            activeValidators.length === 1 ? '' : 's'
-          }. Do you still want to invite another validator?`,
-        )
-        if (!shouldContinue) return
-      }
-    }
-
-    setInviteLoading(true)
-
-    const success: string[] = []
-    const failed: { email: string; reason: string }[] = []
-
-    for (const email of inviteEmails) {
-      if (!isValidEmail(email)) {
-        failed.push({
-          email,
-          reason: 'Enter a valid email address.',
-        })
-        continue
-      }
-
-      try {
-        const response = await inviteUser({
-          recipientEmail: email,
-          institutionId: inviteSelectedInstId,
-          assignedRole: inviteRole,
-        })
-        if (response.data.emailDelivered) {
-          success.push(email)
-        } else {
-          failed.push({
-            email,
-            reason: `Account was provisioned, but the email was not delivered. Invite link: ${response.data.invitationUrl}`,
-          })
-        }
-      } catch (err: any) {
-        failed.push({
-          email,
-          reason: getApiErrorMessage(err, 'Invitation failed to process.'),
-        })
-      }
-    }
-
-    setInviteResults({
-      total: inviteEmails.length,
-      success,
-      failed,
-    })
-    void loadManagementLists(inviteSelectedInstId)
-    setInviteLoading(false)
-  }
-
-  const handleResendInvitation = async (id: string) => {
-    setResendingInviteId(id)
-    setManagementError('')
-    try {
-      await resendInvitation(id)
-      if (inviteSelectedInstId) {
-        await loadManagementLists(inviteSelectedInstId)
-      }
-    } catch (err: any) {
-      setManagementError(getApiErrorMessage(err, 'Unable to resend invitation.'))
-    } finally {
-      setResendingInviteId(null)
-    }
-  }
-
-  const handleToggleUserStatus = async (managedUser: UserProfileResponse) => {
-    const normalizedState = managedUser.accountState.toLowerCase()
-    const nextState = normalizedState === 'inactive' ? 'active' : 'inactive'
-    const verb = nextState === 'inactive' ? 'deactivate' : 'reactivate'
-
-    if (!window.confirm(`Are you sure you want to ${verb} ${managedUser.email}?`)) {
-      return
-    }
-
-    setUpdatingUserId(managedUser.id)
-    setManagementError('')
-    try {
-      const response = await updateUserStatus(managedUser.id, nextState)
-      setManagedUsers((current) =>
-        current.map((item) => (item.id === managedUser.id ? response.data : item)),
-      )
-      if (inviteSelectedInstId) {
-        const countsResponse = await getUserCounts(inviteSelectedInstId)
-        setDashboardStats((current) => ({
-          ...current,
-          contributors: countsResponse.data.contributors,
-          validators: countsResponse.data.validators,
-        }))
-      }
-    } catch (err: any) {
-      setManagementError(getApiErrorMessage(err, `Unable to ${verb} user.`))
-    } finally {
-      setUpdatingUserId(null)
-    }
-  }
-
-  async function loadManagementLists(institutionId: string) {
-    setManagementLoading(true)
-    setManagementError('')
-    try {
-      const [usersResponse, pendingResponse] = await Promise.all([
-        listUsers(institutionId),
-        listPendingInvitations(institutionId),
-      ])
-      setManagedUsers(usersResponse.data)
-      setSelectedManagedUserId((current) =>
-        current && usersResponse.data.some((managedUser) => managedUser.id === current)
-          ? current
-          : null,
-      )
-      setPendingInvitations(pendingResponse.data)
-    } catch (err: any) {
-      setManagedUsers([])
-      setPendingInvitations([])
-      setSelectedManagedUserId(null)
-      setManagementError(getApiErrorMessage(err, 'Unable to load users and invitations.'))
-    } finally {
-      setManagementLoading(false)
-    }
-  }
-
-  const handleResubmitFailedOnly = () => {
-    if (!inviteResults) return
-    const failedEmails = inviteResults.failed.map((f) => f.email).join(', ')
-    setInviteEmailsText(failedEmails)
-    setInviteResults(null)
-  }
-
   const handleActionClick = (title: string) => {
     if (title === 'Submit Event Content') {
       navigate('/submissions/new')
       return
     }
     if (title === 'Invite Users') {
-      setOpenModal('invite')
+      navigate('/admin/user-management/invitations')
       return
     }
     if (title === 'Manage Contributors') {
-      setInviteRole('contributor')
-      setOpenModal('invite')
+      navigate('/admin/user-management/invitations')
       return
     }
     if (title === 'Add Institution') {
@@ -503,127 +247,8 @@ export default function DashboardScreen({
   }
 
   return (
-    <Screen id="dashboard" active={active}>
-      <div id="screen-dashboard" style={{ background: 'var(--d-bg)' }}>
-        <div id="session-banner" className={showBanner ? '' : 'hidden'}>
-          <div className="banner-msg">
-            <i className="ti ti-clock-exclamation"></i>
-            <span>
-              Your session expires in <strong id="banner-time">{bannerTime}</strong>
-              . Stay logged in?
-            </span>
-          </div>
-          <div className="banner-actions">
-            <button type="button" className="banner-btn banner-btn-stay" onClick={onStayLoggedIn}>
-              Stay Logged In
-            </button>
-            <button
-              type="button"
-              className="banner-btn banner-btn-dismiss"
-              onClick={onDismissBanner}
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
-          {/* SIDEBAR NAVIGATION */}
-          <aside className="dash-sidebar" id="dash-sidebar">
-            <div className="sidebar-brand-wrapper">
-              <div className="dash-brand">
-                <div className="dash-brand-icon">
-                  <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'white' }}>
-                    <path d="M12 2L22 7V17L12 22L2 17V7L12 2Z" />
-                  </svg>
-                </div>
-                <div className="dash-brand-name" style={{ marginLeft: 8 }}>
-                  DASIG<em>Connect</em>
-                </div>
-              </div>
-            </div>
-
-            <div className="sidebar-nav">
-              <button className="sidebar-link active">
-                <i className="ti ti-layout-dashboard"></i> Dashboard
-              </button>
-              <button
-                className="sidebar-link"
-                id="side-nav-submit"
-                style={{ display: navVisibility(user).submit ? 'flex' : 'none' }}
-                onClick={() => {
-                  if (user?.role === 'contributor') navigate('/submissions/new')
-                }}
-              >
-                <i className="ti ti-photo-up"></i>
-                <span id="side-nav-submit-lbl">{navVisibility(user).submitLabel}</span>
-              </button>
-              <button
-                className="sidebar-link"
-                id="side-nav-manage"
-                style={{ display: navVisibility(user).manage ? 'flex' : 'none' }}
-                onClick={() => {
-                  if (user?.role === 'admin' || user?.role === 'validator') setOpenModal('invite')
-                }}
-              >
-                <i className="ti ti-users"></i> Manage Users
-              </button>
-              <button
-                className="sidebar-link"
-                id="side-nav-schedule"
-                style={{ display: navVisibility(user).schedule ? 'flex' : 'none' }}
-              >
-                <i className="ti ti-calendar-event"></i> Scheduler
-              </button>
-            </div>
-          </aside>
-
-          {/* MAIN CONTENT AREA */}
-          <div className="dash-content-container">
-            <nav className="dash-nav">
-              <div className="dash-brand">
-                <div className="dash-brand-icon">
-                  <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'white' }}>
-                    <path d="M12 2L22 7V17L12 22L2 17V7L12 2Z" />
-                  </svg>
-                </div>
-                <div className="dash-brand-name">
-                  DASIG<em>Connect</em>
-                </div>
-              </div>
-              <div className="dash-nav-right">
-                <div className={`role-chip ${roleChip(user).className}`} id="role-chip">
-                  {roleChip(user).label}
-                </div>
-                <div className="dash-avatar" id="dash-avatar" onClick={onToggleDropdown}>
-                  <span id="dash-initials">{user?.initials ?? 'NA'}</span>
-                  <div className={`user-dropdown${showDropdown ? '' : ' hidden'}`} id="user-dropdown">
-                    <div className="udrop-header">
-                      <div className="udrop-name" id="dd-name">
-                        {user?.name ?? 'Unknown'}
-                      </div>
-                      <div className="udrop-role" id="dd-role-inst">
-                        {user
-                          ? `${capitalize(user.role)} · ${shortInstitution(getInstitutionName(user))}`
-                          : ''}
-                      </div>
-                    </div>
-                    <div className="udrop-item">
-                      <i className="ti ti-key"></i> Change Password
-                    </div>
-                    <div className="udrop-item">
-                      <i className="ti ti-settings"></i> Account Settings
-                    </div>
-                    <div className="udrop-sep"></div>
-                    <div className="udrop-item danger" onClick={onLogout}>
-                      <i className="ti ti-logout" style={{ color: 'var(--error)' }}></i> Sign Out
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </nav>
-
-          <div className="dash-body">
+    <div id="screen-dashboard" style={{ background: 'var(--d-bg)' }}>
+      <div className="dash-body">
             <div className="dash-page-header">
               <div className="dash-greeting" id="dash-greeting">
                 {greeting(user)}
@@ -837,193 +462,8 @@ export default function DashboardScreen({
               </div>
             )}
 
-            {openModal === 'invite' && (
-              <div className="dash-modal-backdrop" onClick={handleCloseModals}>
-                <div
-                  className="dash-modal-card"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <div className="dash-modal-header">
-                    <div>
-                      <div className="dash-modal-title">Invite Users</div>
-                      <div className="dash-modal-sub">
-                        Send secure onboarding links to Validators or Contributors.
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="dash-modal-close"
-                      onClick={handleCloseModals}
-                      aria-label="Close"
-                    >
-                      <i className="ti ti-x"></i>
-                    </button>
-                  </div>
-
-                  {institutionsError && (
-                    <div className="alert alert-err">
-                      <i className="ti ti-alert-circle"></i>
-                      <div>{institutionsError}</div>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleSendInvitations}>
-                    <div className="dash-field">
-                      <label className="dash-field-label">Recipient Emails</label>
-                      <textarea
-                        className="dash-textarea"
-                        placeholder="dean@su.edu.ph, registrar@su.edu.ph"
-                        value={inviteEmailsText}
-                        onChange={(event) => setInviteEmailsText(event.target.value)}
-                      ></textarea>
-                      <div className="dash-field-hint">
-                        Enter up to 15 emails separated by commas or new lines.
-                      </div>
-                    </div>
-
-                    <div className="dash-field-grid">
-                      <div className="dash-field">
-                        <label className="dash-field-label">Role</label>
-                        <select
-                          className="dash-select"
-                          value={inviteRole}
-                          onChange={(event) => setInviteRole(event.target.value as 'validator' | 'contributor')}
-                          disabled={user?.role === 'validator'}
-                        >
-                          <option value="validator">Validator</option>
-                          <option value="contributor">Contributor</option>
-                        </select>
-                      </div>
-                      <div className="dash-field">
-                        <label className="dash-field-label">Institution</label>
-                        <select
-                          className="dash-select"
-                          value={inviteSelectedInstId}
-                          onChange={(event) => setInviteSelectedInstId(event.target.value)}
-                          disabled={institutionsLoading || institutions.length === 0}
-                        >
-                          {institutionsLoading && <option>Loading institutions...</option>}
-                          {!institutionsLoading && institutions.length === 0 && (
-                            <option>No institutions yet</option>
-                          )}
-                          {!institutionsLoading &&
-                            institutions.map((inst) => (
-                              <option key={inst.id} value={inst.id}>
-                                {inst.name}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {inviteResults && (
-                      <div className="dash-invite-results">
-                        <div className="dash-invite-summary">
-                          {inviteResults.success.length} of {inviteResults.total} invites sent.
-                        </div>
-                        {inviteResults.success.length > 0 && (
-                          <div className="dash-invite-list">
-                            <strong>Sent</strong>
-                            <div>{inviteResults.success.join(', ')}</div>
-                          </div>
-                        )}
-                        {inviteResults.failed.length > 0 && (
-                          <div className="dash-invite-list dash-invite-failed">
-                            <strong>Failed</strong>
-                            {inviteResults.failed.map((item) => (
-                              <div key={item.email}>
-                                {item.email}: {item.reason}
-                              </div>
-                            ))}
-                            <button
-                              type="button"
-                              className="btn-text"
-                              onClick={handleResubmitFailedOnly}
-                            >
-                              Resubmit failed only
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="dash-management-grid">
-                      <section className="dash-management-panel">
-                        <div className="dash-management-head">
-                          <div>
-                            <div className="dash-management-title">Pending Invites</div>
-                            <div className="dash-management-sub">
-                              {pendingInvitations.length} active invite link{pendingInvitations.length === 1 ? '' : 's'}
-                            </div>
-                          </div>
-                        </div>
-                        {managementLoading ? (
-                          <div className="dash-empty-row">Loading invitations...</div>
-                        ) : pendingInvitations.length === 0 ? (
-                          <div className="dash-empty-row">No pending invitations.</div>
-                        ) : (
-                          <div className="dash-compact-list">
-                            {pendingInvitations.map((invite) => (
-                              <div className="dash-compact-row" key={invite.id}>
-                                <div>
-                                  <div className="dash-compact-primary">{invite.recipientEmail}</div>
-                                  <div className="dash-compact-meta">
-                                    {formatRoleLabel(invite.assignedRole)} · expires {formatDate(invite.expiresAt)}
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  className="btn-text"
-                                  disabled={resendingInviteId === invite.id}
-                                  onClick={() => void handleResendInvitation(invite.id)}
-                                >
-                                  {resendingInviteId === invite.id ? 'Resending...' : 'Resend'}
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </section>
-
-                      <UserManagementPanel
-                        currentUser={user}
-                        users={managedUsers}
-                        loading={managementLoading}
-                        selectedUserId={selectedManagedUserId}
-                        updatingUserId={updatingUserId}
-                        onSelectUser={setSelectedManagedUserId}
-                        onToggleUserStatus={(managedUser) => void handleToggleUserStatus(managedUser)}
-                      />
-                    </div>
-
-                    {managementError && (
-                      <div className="alert alert-err">
-                        <i className="ti ti-alert-circle"></i>
-                        <div>{managementError}</div>
-                      </div>
-                    )}
-
-                    <div className="dash-modal-actions">
-                      <button type="button" className="btn-ghost" onClick={handleCloseModals}>
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="btn-primary"
-                        disabled={inviteLoading || institutions.length === 0}
-                      >
-                        {inviteLoading ? 'Sending...' : 'Send Invite'}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
           </div>
-        </div>
       </div>
-    </div>
-    </Screen>
   )
 }
 
@@ -1048,34 +488,6 @@ function getInstitutionName(user: User | null): string {
 
   const emailDomain = user.email.split('@')[1]?.split('.')[0]?.toLowerCase() || ''
   return DOMAIN_MAP[emailDomain] || emailDomain.toUpperCase() || 'Institution'
-}
-
-function navVisibility(user: User | null) {
-  if (!user) {
-    return { submit: false, manage: false, schedule: false, submitLabel: 'Submit Content' }
-  }
-  if (user.role === 'admin') {
-    return {
-      submit: false,
-      manage: true,
-      schedule: true,
-      submitLabel: 'Submissions',
-    }
-  }
-  if (user.role === 'validator') {
-    return {
-      submit: true,
-      manage: true,
-      schedule: true,
-      submitLabel: 'Review Queue',
-    }
-  }
-  return {
-    submit: true,
-    manage: false,
-    schedule: false,
-    submitLabel: 'Submit Content',
-  }
 }
 
 function roleChip(user: User | null) {
@@ -1254,24 +666,6 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
-function formatRoleLabel(value: string) {
-  const normalized = value.toLowerCase()
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
-}
-
-function shortInstitution(value: string) {
-  return value
-}
-
-function formatDate(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'soon'
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })
-}
-
 function normalizeDomain(domain: string) {
   return domain.trim().toLowerCase().replace(/^@/, '')
 }
@@ -1280,12 +674,21 @@ function isValidDomain(domain: string) {
   return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)
 }
 
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+function getApiErrorMessage(error: unknown, fallback: string) {
+  if (!isRecord(error)) return fallback
+  const response = error.response
+  if (isRecord(response)) {
+    const data = response.data
+    if (isRecord(data)) {
+      if (typeof data.error === 'string') return data.error
+      if (typeof data.message === 'string') return data.message
+    }
+  }
+  return typeof error.message === 'string' ? error.message : fallback
 }
 
-function getApiErrorMessage(err: any, fallback: string) {
-  return err.response?.data?.error || err.response?.data?.message || err.message || fallback
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 function generateInstitutionCode(name: string, domain: string) {

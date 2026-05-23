@@ -66,15 +66,12 @@ public class BackendApplication {
 				.baselineVersion(baselineVersion)
 				.load();
 		
-		System.out.println("Executing Flyway Migrations against Supabase...");
-		org.flywaydb.core.api.output.MigrateResult result = flyway.migrate();
-		System.out.println("Flyway Migration Complete! Executed " + result.migrationsExecuted + " migrations.");
 		System.out.println("==================================================");
 		return flyway;
 	}
 
 	@Bean
-	@ConditionalOnProperty(name = "spring.flyway.enabled", havingValue = "true", matchIfMissing = true)
+	@ConditionalOnProperty(name = "app.db-diagnostics.enabled", havingValue = "true")
 	public CommandLineRunner dbDiagnostics(
 			org.flywaydb.core.Flyway flyway,
 			DataSource dataSource,

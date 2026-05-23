@@ -20,7 +20,13 @@ import InviteScreen from '../features/auth/InviteScreen'
 import NoAccountScreen from '../features/auth/NoAccountScreen'
 import DashboardScreen from '../features/dashboard/DashboardScreen'
 import SubmissionScreen from '../features/submission/SubmissionScreen'
+import UserInvitationsScreen from '../features/user-management/UserInvitationsScreen'
+import DashboardLayout from '../components/layout/DashboardLayout'
 import SessionModal from '../components/modals/SessionModal'
+import Toast from '../components/common/Toast'
+import LoginSplash from '../components/common/LoginSplash'
+import PageLoader from '../components/common/PageLoader'
+import { useToast } from '../context/ToastContext'
 
 const LOCKOUT_LIMIT = 5
 const LOCKOUT_SECONDS = 15 * 60
@@ -29,6 +35,10 @@ const SESSION_WARNING_SECONDS = 5 * 60
 function App() {
   const navigate = useNavigate()
   const location = useLocation()
+  const toast = useToast()
+
+  const [showSplash, setShowSplash] = useState(false)
+  const [splashUser, setSplashUser] = useState<User | null>(null)
 
   const [loginLoading, setLoginLoading] = useState(false)
   const [forgotLoading, setForgotLoading] = useState(false)
@@ -197,16 +207,19 @@ function App() {
       localStorage.setItem('dasigconnect_user', JSON.stringify(user))
       setCurrentUser(user)
       startSessionCountdown(apiUser.accessToken)
+      setSplashUser(user)
+      setShowSplash(true)
+      window.setTimeout(() => setShowSplash(false), 1900)
       navigate('/dashboard')
       resetLoginState()
-    } catch (err: any) {
+    } catch (err: unknown) {
       const nextAttempts = attempts + 1
       setAttempts(nextAttempts)
       if (nextAttempts >= LOCKOUT_LIMIT) {
         triggerLockout()
       } else {
         setLoginError(
-          err.response?.data?.message ||
+          getApiErrorMessage(err, '') ||
             `Invalid credentials. ${LOCKOUT_LIMIT - nextAttempts} attempts remaining before lockout.`
         )
       }
@@ -236,8 +249,8 @@ function App() {
       setResetSuccess(true)
       setResetPassword('')
       setResetConfirmPassword('')
-    } catch (err: any) {
-      setResetError(err.response?.data?.error || err.message || 'Password reset failed.')
+    } catch (err: unknown) {
+      setResetError(getApiErrorMessage(err, 'Password reset failed.'))
     } finally {
       setResetLoading(false)
     }
@@ -293,6 +306,7 @@ function App() {
     stopSessionCountdown()
     resetLoginState()
     navigate('/login')
+    toast.info('You have been signed out.')
   }
 
   async function handleModalLogin() {
@@ -386,11 +400,13 @@ function App() {
   }
 
   if (!authReady) {
-    return <div className="screen active" />
+    return <PageLoader />
   }
 
   return (
     <>
+      <Toast />
+      <LoginSplash user={splashUser} visible={showSplash} />
       <Routes>
         <Route path="/" element={
           currentUser ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />
@@ -481,10 +497,9 @@ function App() {
           <NoAccountScreen active={true} onBack={() => navigate('/login')} />
         } />
 
-        <Route path="/dashboard" element={
+        <Route element={
           currentUser ? (
-            <DashboardScreen
-              active={true}
+            <DashboardLayout
               user={currentUser}
               showBanner={bannerRemaining > 0}
               bannerTime={bannerTime}
@@ -497,7 +512,10 @@ function App() {
           ) : (
             <Navigate to="/login" replace />
           )
-        } />
+        }>
+          <Route path="/dashboard" element={<DashboardScreen user={currentUser!} />} />
+          <Route path="/admin/user-management/invitations" element={<UserInvitationsScreen user={currentUser!} />} />
+        </Route>
 
         <Route path="/submissions/new" element={
           currentUser ? <SubmissionScreen user={currentUser} /> : <Navigate to="/login" replace />
@@ -624,6 +642,23 @@ function getTokenExpiryMs(token: string) {
   } catch {
     return null
   }
+}
+
+function getApiErrorMessage(error: unknown, fallback: string) {
+  if (!isRecord(error)) return fallback
+  const response = error.response
+  if (isRecord(response)) {
+    const data = response.data
+    if (isRecord(data)) {
+      if (typeof data.error === 'string') return data.error
+      if (typeof data.message === 'string') return data.message
+    }
+  }
+  return typeof error.message === 'string' ? error.message : fallback
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 export default App
