@@ -54,6 +54,9 @@ class UserControllerTest {
         mockMvc.perform(get("/api/v1/me"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("user@cit.edu.ph"))
+                .andExpect(jsonPath("$.firstName").value("Test"))
+                .andExpect(jsonPath("$.lastName").value("User"))
+                .andExpect(jsonPath("$.displayName").value("Test User"))
                 .andExpect(jsonPath("$.role").value("contributor"))
                 .andExpect(jsonPath("$.institutionId").value(institutionId.toString()));
     }
@@ -151,6 +154,8 @@ class UserControllerTest {
         User user = new User();
         user.setId(id);
         user.setEmail(email);
+        user.setFirstName("Test");
+        user.setLastName("User");
         user.setRole(role);
         user.setAccountState(UserStatus.active);
         user.setInstitution(institution);

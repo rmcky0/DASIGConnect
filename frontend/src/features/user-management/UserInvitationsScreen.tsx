@@ -19,6 +19,7 @@ import PendingInvitationsCard from './components/PendingInvitationsCard'
 import type { InstitutionOption, InviteResults, InviteRole } from './types'
 import { toInstitutionOption } from './types'
 import { useToast } from '../../context/ToastContext'
+import { getUserDisplayName } from '../../lib/userIdentity'
 
 type ActiveTab = 'invitations' | 'users'
 
@@ -278,7 +279,7 @@ export default function UserInvitationsScreen({ user }: UserInvitationsScreenPro
 
     setConfirmDialog({
       title: `${verb} User`,
-      message: `Are you sure you want to ${verb.toLowerCase()} ${managedUser.email}?`,
+      message: `Are you sure you want to ${verb.toLowerCase()} ${getUserDisplayName(managedUser)}?`,
       confirmLabel: verb,
       dangerous: nextState === 'inactive',
       onConfirm: () => {

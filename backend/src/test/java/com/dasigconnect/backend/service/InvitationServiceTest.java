@@ -236,7 +236,7 @@ class InvitationServiceTest {
         when(invitationTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(token));
 
         assertThatThrownBy(() -> invitationService.acceptInvitation(
-                new AcceptInvitationRequestDto("validrawtoken", "password1")))
+                new AcceptInvitationRequestDto("validrawtoken", "Mark", "Camoro", "password1")))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode().value())
                 .isEqualTo(410);
@@ -256,11 +256,16 @@ class InvitationServiceTest {
         when(userRepository.findByEmail("invitee@example.com")).thenReturn(Optional.of(new User()));
 
         LoginResponseDto result = invitationService.acceptInvitation(
-                new AcceptInvitationRequestDto("validrawtoken", "password1"));
+                new AcceptInvitationRequestDto("validrawtoken", " Mark ", " Camoro ", "password1"));
 
         assertThat(result.accessToken()).isEqualTo("new.jwt.token");
         assertThat(result.role()).isEqualTo("contributor");
         assertThat(result.institutionId()).isEqualTo(institutionId);
+
+        verify(userRepository).save(argThat(user ->
+                "Mark".equals(user.getFirstName())
+                        && "Camoro".equals(user.getLastName())
+                        && user.getAccountState() == UserStatus.active));
 
         ArgumentCaptor<InvitationToken> tokenCaptor = ArgumentCaptor.forClass(InvitationToken.class);
         verify(invitationTokenRepository).save(tokenCaptor.capture());

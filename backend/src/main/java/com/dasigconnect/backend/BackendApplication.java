@@ -130,6 +130,8 @@ public class BackendApplication {
                     System.out.println("No administrator found. Seeding default administrator...");
                     com.dasigconnect.backend.model.entity.User admin = new com.dasigconnect.backend.model.entity.User();
                     admin.setEmail(adminEmail);
+                    admin.setFirstName("DASIG");
+                    admin.setLastName("Administrator");
                     admin.setRole(com.dasigconnect.backend.model.entity.UserRole.administrator);
                     admin.setPasswordHash(passwordEncoder.encode("admin123"));
                     admin.setAccountState(com.dasigconnect.backend.model.entity.UserStatus.active);

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { User } from '../../types/auth.types'
 
-export type DashboardNavId = 'home' | 'submit' | 'user-management' | 'scheduler' | 'analytics'
+export type DashboardNavId = 'home' | 'submit' | 'institution-management' | 'user-management' | 'scheduler' | 'analytics'
 
 interface DashboardShellProps {
   user: User
@@ -159,11 +159,18 @@ function dashboardNavItems(user: User): DashboardNavItem[] {
       visible: user.role === 'validator' || user.role === 'contributor',
     },
     {
+      id: 'institution-management',
+      icon: 'ti ti-building',
+      label: 'Institution Management',
+      path: '/admin/institution-management',
+      visible: user.role === 'admin',
+    },
+    {
       id: 'user-management',
       icon: 'ti ti-users',
       label: 'User Management',
       path: '/admin/user-management/invitations',
-      visible: user.role === 'admin' || user.role === 'validator',
+      visible: user.role === 'validator',
     },
     {
       id: 'scheduler',

@@ -61,6 +61,9 @@ class UserServiceTest {
 
         assertThat(result.getId()).isEqualTo(userId);
         assertThat(result.getEmail()).isEqualTo("contributor@cit.edu.ph");
+        assertThat(result.getFirstName()).isEqualTo("Test");
+        assertThat(result.getLastName()).isEqualTo("User");
+        assertThat(result.getDisplayName()).isEqualTo("Test User");
         assertThat(result.getRole()).isEqualTo("contributor");
         assertThat(result.getInstitutionId()).isEqualTo(institutionId);
         assertThat(result.getInstitutionName()).isEqualTo("CIT-U");
@@ -207,6 +210,8 @@ class UserServiceTest {
         User user = new User();
         user.setId(id);
         user.setEmail(email);
+        user.setFirstName("Test");
+        user.setLastName("User");
         user.setRole(role);
         user.setAccountState(UserStatus.active);
         user.setInstitution(institution);

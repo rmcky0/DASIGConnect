@@ -31,6 +31,12 @@ public class User {
     @Column(name = "password_hash", length = 255)
     private String passwordHash;
 
+    @Column(name = "first_name", length = 100)
+    private String firstName;
+
+    @Column(name = "last_name", length = 100)
+    private String lastName;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserRole role;
@@ -90,6 +96,22 @@ public class User {
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
     }
 
     public UserRole getRole() {

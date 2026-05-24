@@ -23,6 +23,9 @@ export interface LoginResponse {
 export interface UserProfileResponse {
   id: string;
   email: string;
+  firstName: string | null;
+  lastName: string | null;
+  displayName: string | null;
   role: string;
   accountState: string;
   institutionId: string | null;
@@ -59,8 +62,15 @@ export function validateInvitation(token: string) {
   });
 }
 
-export function acceptInvitation(token: string, password: string) {
-  return api.post<LoginResponse>("/invitations/accept", { token, password });
+export interface AcceptInvitationPayload {
+  token: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+}
+
+export function acceptInvitation(payload: AcceptInvitationPayload) {
+  return api.post<LoginResponse>("/invitations/accept", payload);
 }
 
 export function getMe() {
