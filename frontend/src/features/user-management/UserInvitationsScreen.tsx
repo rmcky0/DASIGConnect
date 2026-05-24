@@ -422,17 +422,6 @@ export default function UserInvitationsScreen({ user }: UserInvitationsScreenPro
               selectedInstitution={selectedInstitution}
               canChooseRole={user.role === 'admin'}
               sending={sending}
-              pendingInvitationsCount={pendingInvitations.length}
-              activeContributorsCount={
-                managedUsers.filter(
-                  (u) => u.role.toLowerCase() === 'contributor' && u.accountState.toLowerCase() === 'active',
-                ).length
-              }
-              activeValidatorsCount={
-                managedUsers.filter(
-                  (u) => u.role.toLowerCase() === 'validator' && u.accountState.toLowerCase() === 'active',
-                ).length
-              }
               onDraftChange={setEmailDraft}
               onAddChip={(email) => {
                 if (!emailChips.includes(email.toLowerCase())) {

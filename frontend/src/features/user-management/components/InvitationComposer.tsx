@@ -11,9 +11,6 @@ interface InvitationComposerProps {
   selectedInstitution: InstitutionOption | null
   canChooseRole: boolean
   sending: boolean
-  pendingInvitationsCount?: number
-  activeContributorsCount?: number
-  activeValidatorsCount?: number
   onDraftChange: (value: string) => void
   onAddChip: (email: string) => void
   onRemoveChip: (index: number) => void
@@ -28,9 +25,6 @@ export default function InvitationComposer({
   selectedInstitution,
   canChooseRole,
   sending,
-  pendingInvitationsCount,
-  activeContributorsCount,
-  activeValidatorsCount,
   onDraftChange,
   onAddChip,
   onRemoveChip,
@@ -40,10 +34,6 @@ export default function InvitationComposer({
   const recipientCount = chips.length
   const atLimit = recipientCount >= 15
   const invalidRecipientCount = chips.filter((chip) => !isValidEmail(chip)).length
-  const hasOperationalContext =
-    pendingInvitationsCount !== undefined ||
-    activeContributorsCount !== undefined ||
-    activeValidatorsCount !== undefined
 
   return (
     <section className={`um-composer${sending ? ' is-busy' : ''}`} aria-busy={sending}>
@@ -167,29 +157,6 @@ export default function InvitationComposer({
                 <span>{selectedInstitution.emailDomain}</span>
               </div>
             </div>
-          </div>
-        )}
-
-        {hasOperationalContext && (
-          <div className="um-composer-insights" aria-label="Invitation context">
-            {pendingInvitationsCount !== undefined && (
-              <span>
-                <i className="ti ti-mail-forward" aria-hidden="true"></i>
-                {pendingInvitationsCount} pending invite{pendingInvitationsCount === 1 ? '' : 's'}
-              </span>
-            )}
-            {activeContributorsCount !== undefined && (
-              <span>
-                <i className="ti ti-pencil" aria-hidden="true"></i>
-                {activeContributorsCount} contributor{activeContributorsCount === 1 ? '' : 's'}
-              </span>
-            )}
-            {activeValidatorsCount !== undefined && (
-              <span>
-                <i className="ti ti-shield-check" aria-hidden="true"></i>
-                {activeValidatorsCount} validator{activeValidatorsCount === 1 ? '' : 's'}
-              </span>
-            )}
           </div>
         )}
 

@@ -9,7 +9,6 @@ import {
   inviteUser,
   listPendingInvitations,
   listUsers,
-  resendInvitation,
   updateUserStatus,
 } from '../../api/authApi'
 import type { PendingInvitationResponse, UserProfileResponse } from '../../api/authApi'
@@ -19,7 +18,6 @@ import DeliveryIssuesAlert from '../user-management/components/DeliveryIssuesAle
 import InstitutionUsersCard from '../user-management/components/InstitutionUsersCard'
 import InvitationComposer from '../user-management/components/InvitationComposer'
 import { SkeletonBlock } from '../user-management/components/LoadingPrimitives'
-import PendingInvitationsCard from '../user-management/components/PendingInvitationsCard'
 import type { InviteResults, InviteRole } from '../user-management/types'
 import { useToast } from '../../context/ToastContext'
 import { getUserDisplayName } from '../../lib/userIdentity'
@@ -95,8 +93,7 @@ export default function InstitutionManagementScreen({ user }: InstitutionManagem
   const [managedUsers, setManagedUsers] = useState<UserProfileResponse[]>([])
   const [managementLoading, setManagementLoading] = useState(false)
   const [managementError, setManagementError] = useState('')
-  const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null)
-  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
+const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
 
   // Confirm dialog
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null)
@@ -400,20 +397,6 @@ export default function InstitutionManagementScreen({ user }: InstitutionManagem
     })
   }
 
-  async function handleResendInvitation(id: string) {
-    setResendingInvitationId(id)
-    try {
-      await resendInvitation(id)
-      toast.success('Invitation resent.')
-      if (selectedInstitution) {
-        await loadManagementLists(selectedInstitution.id)
-      }
-    } catch (error: unknown) {
-      toast.error(getApiErrorMessage(error, 'Unable to resend invitation.'))
-    } finally {
-      setResendingInvitationId(null)
-    }
-  }
 
   function handleToggleUserStatus(managedUser: UserProfileResponse) {
     const nextState =
@@ -654,7 +637,7 @@ export default function InstitutionManagementScreen({ user }: InstitutionManagem
             </div>
           )}
 
-          <div className="um-tabs" role="tablist" aria-label="Institution sections">
+          <div className="um-tabs im-tabs-stretch" role="tablist" aria-label="Institution sections">
             <button
               type="button"
               role="tab"
@@ -666,9 +649,6 @@ export default function InstitutionManagementScreen({ user }: InstitutionManagem
             >
               <i className="ti ti-send" aria-hidden="true"></i>
               Invitations
-              {pendingInvitations.length > 0 && (
-                <span className="um-tab-badge">{pendingInvitations.length}</span>
-              )}
             </button>
             <button
               type="button"
@@ -680,7 +660,7 @@ export default function InstitutionManagementScreen({ user }: InstitutionManagem
               onClick={() => setActiveTab('users')}
             >
               <i className="ti ti-users" aria-hidden="true"></i>
-              Users
+              Manage Users
               {managedUsers.length > 0 && (
                 <span className="um-tab-badge is-neutral">{managedUsers.length}</span>
               )}
@@ -701,17 +681,6 @@ export default function InstitutionManagementScreen({ user }: InstitutionManagem
                 selectedInstitution={selectedInstitutionOption}
                 canChooseRole={true}
                 sending={sending}
-                pendingInvitationsCount={pendingInvitations.length}
-                activeContributorsCount={
-                  managedUsers.filter(
-                    (u) => u.role.toLowerCase() === 'contributor' && u.accountState.toLowerCase() === 'active',
-                  ).length
-                }
-                activeValidatorsCount={
-                  managedUsers.filter(
-                    (u) => u.role.toLowerCase() === 'validator' && u.accountState.toLowerCase() === 'active',
-                  ).length
-                }
                 onDraftChange={setEmailDraft}
                 onAddChip={(email) => {
                   if (!emailChips.includes(email.toLowerCase())) {
@@ -731,25 +700,6 @@ export default function InstitutionManagementScreen({ user }: InstitutionManagem
                   onResubmitFailed={handleResubmitFailed}
                 />
               )}
-
-              <PendingInvitationsCard
-                invitations={pendingInvitations}
-                institutions={
-                  selectedInstitution
-                    ? [
-                        {
-                          id: selectedInstitution.id,
-                          name: selectedInstitution.name,
-                          code: selectedInstitution.code,
-                          emailDomain: selectedInstitution.emailDomain,
-                        },
-                      ]
-                    : []
-                }
-                loading={managementLoading}
-                resendingInvitationId={resendingInvitationId}
-                onResend={(id) => void handleResendInvitation(id)}
-              />
             </div>
           )}
 
@@ -814,6 +764,7 @@ export default function InstitutionManagementScreen({ user }: InstitutionManagem
               />
             </div>
           )}
+
         </main>
 
         {confirmDialog && (

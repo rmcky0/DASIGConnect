@@ -47,7 +47,7 @@ export default function PendingInvitationsCard({
   const hasFilters = search !== '' || roleFilter !== 'all' || expiryFilter !== 'all'
 
   return (
-    <section className={`um-data-card${loading ? ' is-busy' : ''}`} aria-busy={loading}>
+    <section className={`um-data-card um-pending-card${loading ? ' is-busy' : ''}`} aria-busy={loading}>
       <div className="um-data-card-header">
         <div className="um-data-card-title-group">
           <h2 className="um-data-card-title">Pending Invitations</h2>
@@ -60,7 +60,7 @@ export default function PendingInvitationsCard({
         </div>
       </div>
 
-      <div className="um-filter-bar">
+      <div className="um-filter-bar um-pending-filter-bar">
         <div className="um-search-wrap">
           <i className="ti ti-search um-search-icon" aria-hidden="true"></i>
           <input
@@ -72,33 +72,39 @@ export default function PendingInvitationsCard({
             aria-label="Search invitations"
           />
         </div>
-        <div className="um-filter-pills" role="group" aria-label="Filter by role">
-          {(['all', 'contributor', 'validator'] as RoleFilter[]).map((value) => (
-            <button
-              key={value}
-              type="button"
-              className={`um-filter-pill${roleFilter === value ? ' is-active' : ''}`}
-              onClick={() => setRoleFilter(value)}
-            >
-              {value === 'all' ? 'All Roles' : value.charAt(0).toUpperCase() + value.slice(1)}
-            </button>
-          ))}
+        <div className="um-filter-group">
+          <span className="um-filter-label">Role</span>
+          <div className="um-filter-pills" role="group" aria-label="Filter by role">
+            {(['all', 'contributor', 'validator'] as RoleFilter[]).map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={`um-filter-pill${roleFilter === value ? ' is-active' : ''}`}
+                onClick={() => setRoleFilter(value)}
+              >
+                {value === 'all' ? 'All' : value.charAt(0).toUpperCase() + value.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="um-filter-pills" role="group" aria-label="Filter by expiry">
-          {([
-            { value: 'all', label: 'All' },
-            { value: 'soon', label: 'Expiring soon' },
-            { value: 'expired', label: 'Expired' },
-          ] as { value: ExpiryFilter; label: string }[]).map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              className={`um-filter-pill${expiryFilter === value ? ' is-active' : ''}`}
-              onClick={() => setExpiryFilter(value)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="um-filter-group">
+          <span className="um-filter-label">Expiry</span>
+          <div className="um-filter-pills" role="group" aria-label="Filter by expiry">
+            {([
+              { value: 'all', label: 'All' },
+              { value: 'soon', label: 'Expiring soon' },
+              { value: 'expired', label: 'Expired' },
+            ] as { value: ExpiryFilter; label: string }[]).map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                className={`um-filter-pill${expiryFilter === value ? ' is-active' : ''}`}
+                onClick={() => setExpiryFilter(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
