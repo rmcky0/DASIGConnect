@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import "../styles/index.css";
 import "../styles/submission.css";
 import "../styles/user-management.css";
+import "../styles/institution-management.css";
 import "../styles/ui.css";
 import { ToastProvider } from "../context/ToastContext";
 import App from "./App.tsx";

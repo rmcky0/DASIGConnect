@@ -27,6 +27,7 @@ import NoAccountScreen from "../features/auth/NoAccountScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import SubmissionScreen from "../features/submission/SubmissionScreen";
 import UserInvitationsScreen from "../features/user-management/UserInvitationsScreen";
+import InstitutionManagementScreen from "../features/institution-management/InstitutionManagementScreen";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import SessionModal from "../components/modals/SessionModal";
 import Toast from "../components/common/Toast";
@@ -34,6 +35,12 @@ import LoginSplash from "../components/common/LoginSplash";
 import PageLoader from "../components/common/PageLoader";
 import ProtectedRoute from "../components/common/ProtectedRoute";
 import { useToast } from "../context/ToastContext";
+import {
+  fallbackDisplayNameFromEmail,
+  getUserDisplayName,
+  getUserInitials,
+  initialsFromEmail,
+} from "../lib/userIdentity";
 
 const LOCKOUT_LIMIT = 5;
 const LOCKOUT_SECONDS = 15 * 60;
@@ -83,6 +90,8 @@ function App() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("");
   const [inviteInstitution, setInviteInstitution] = useState("");
+  const [inviteFirstName, setInviteFirstName] = useState("");
+  const [inviteLastName, setInviteLastName] = useState("");
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteConfirmPassword, setInviteConfirmPassword] = useState("");
   const [showInvitePassword, setShowInvitePassword] = useState(false);
@@ -102,6 +111,8 @@ function App() {
   const sessionWarningDismissedRef = useRef(false);
 
   const inviteRules = useMemo(() => {
+    const firstName = isValidProfileName(inviteFirstName);
+    const lastName = isValidProfileName(inviteLastName);
     const length = invitePassword.length >= 8;
     const upper = /[A-Z]/.test(invitePassword);
     const number = /[0-9]/.test(invitePassword);
@@ -109,8 +120,8 @@ function App() {
     const match =
       inviteConfirmPassword.length > 0 &&
       invitePassword === inviteConfirmPassword;
-    return { length, upper, number, symbol, match };
-  }, [invitePassword, inviteConfirmPassword]);
+    return { firstName, lastName, length, upper, number, symbol, match };
+  }, [inviteFirstName, inviteLastName, invitePassword, inviteConfirmPassword]);
 
   useEffect(() => {
     const savedToken = localStorage.getItem("dasigconnect_token");
@@ -292,9 +303,20 @@ function App() {
 
   async function handleInviteActivate() {
     if (!inviteToken) return;
+    const firstName = normalizeProfileName(inviteFirstName);
+    const lastName = normalizeProfileName(inviteLastName);
+    if (!isValidProfileName(firstName) || !isValidProfileName(lastName)) {
+      toast.error("Please enter a valid first and last name.");
+      return;
+    }
     setInviteLoading(true);
     try {
-      const response = await acceptInvitation(inviteToken, invitePassword);
+      const response = await acceptInvitation({
+        token: inviteToken,
+        firstName,
+        lastName,
+        password: invitePassword,
+      });
       setAuthToken(response.data.accessToken);
       const email = inviteEmail.trim().toLowerCase();
       const fallbackUser = buildUserFromLogin(
@@ -307,8 +329,11 @@ function App() {
       localStorage.setItem("dasigconnect_user", JSON.stringify(user));
       setCurrentUser(user);
       startSessionCountdown(response.data.accessToken);
+      toast.success("Account activated. Welcome to DASIGConnect.");
       setInviteState("success");
+      navigate("/dashboard");
     } catch {
+      toast.error("We could not activate this invitation. Please request a new link.");
       setInviteState("expired");
     } finally {
       setInviteLoading(false);
@@ -421,6 +446,11 @@ function App() {
       setInviteRole(formatRoleLabel(data.assignedRole));
       setInviteInstitution(data.institutionName);
       setInviteCountdown(`Invitation expires ${formatExpiry(data.expiresAt)}`);
+      setInviteFirstName("");
+      setInviteLastName("");
+      setInvitePassword("");
+      setInviteConfirmPassword("");
+      setInviteState("form");
     } catch {
       setInviteState("expired");
     }
@@ -527,10 +557,14 @@ function App() {
               email={inviteEmail}
               roleLabel={inviteRole}
               institution={inviteInstitution}
+              firstName={inviteFirstName}
+              lastName={inviteLastName}
               password={invitePassword}
               confirmPassword={inviteConfirmPassword}
               rules={inviteRules}
               inviteCountdown={inviteCountdown}
+              onFirstNameChange={setInviteFirstName}
+              onLastNameChange={setInviteLastName}
               onPasswordChange={setInvitePassword}
               onConfirmPasswordChange={setInviteConfirmPassword}
               onTogglePassword={() =>
@@ -576,6 +610,14 @@ function App() {
           <Route
             path="/dashboard"
             element={<DashboardScreen user={currentUser!} />}
+          />
+          <Route
+            path="/admin/institution-management"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={["admin"]}>
+                <InstitutionManagementScreen user={currentUser!} />
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/admin/user-management/invitations"
@@ -648,7 +690,10 @@ function buildUserFromLogin(
     email,
     pw: "",
     role: mapApiRole(apiUser.role),
-    name: displayNameFromEmail(email),
+    name: fallbackDisplayNameFromEmail(email),
+    firstName: null,
+    lastName: null,
+    displayName: null,
     inst: fallbackInstitutionName || institutionFallbackFromEmail(email),
     institutionId: apiUser.institutionId,
     initials: initialsFromEmail(email),
@@ -660,37 +705,24 @@ function buildUserFromProfile(
   fallbackEmail: string,
 ): User {
   const email = (profile.email || fallbackEmail).trim().toLowerCase();
+  const displayName = getUserDisplayName(profile);
   return {
     email,
     pw: "",
     role: mapApiRole(profile.role),
-    name: displayNameFromEmail(email),
+    name: displayName,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    displayName: profile.displayName,
     inst: profile.institutionName || institutionFallbackFromEmail(email),
     institutionId: profile.institutionId,
-    initials: initialsFromEmail(email),
+    initials: getUserInitials(profile),
   };
-}
-
-function displayNameFromEmail(email: string) {
-  const name = email.split("@")[0] || "User";
-  return name
-    .split(".")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function institutionFallbackFromEmail(email: string) {
   const emailDomain = email.split("@")[1]?.split(".")[0]?.toLowerCase() || "";
   return emailDomain.toUpperCase() || "Institution";
-}
-
-function initialsFromEmail(email: string) {
-  const name = email.split("@")[0] || "U";
-  const parts = name.split(".");
-  if (parts.length >= 2) {
-    return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase();
-  }
-  return name.substring(0, 2).toUpperCase();
 }
 
 function formatRoleLabel(role: string) {
@@ -720,6 +752,19 @@ function getTokenExpiryMs(token: string) {
   } catch {
     return null;
   }
+}
+
+function normalizeProfileName(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function isValidProfileName(value: string) {
+  const normalized = normalizeProfileName(value);
+  return (
+    normalized.length >= 1 &&
+    normalized.length <= 100 &&
+    /^[\p{L}][\p{L} '\-]*$/u.test(normalized)
+  );
 }
 
 function getApiErrorMessage(error: unknown, fallback: string) {

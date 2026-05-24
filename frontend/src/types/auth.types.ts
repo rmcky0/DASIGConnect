@@ -13,6 +13,9 @@ export interface User {
   pw: string
   role: UserRole
   name: string
+  firstName?: string | null
+  lastName?: string | null
+  displayName?: string | null
   inst: string
   institutionId?: string | null
   initials: string

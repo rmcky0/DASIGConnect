@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { UserProfileResponse } from '../../../api/authApi'
 import type { User } from '../../../types/auth.types'
+import { getUserDisplayName, getUserInitials } from '../../../lib/userIdentity'
 import ActionMenu from './ActionMenu'
 import { InlineSpinner, SkeletonRows } from './LoadingPrimitives'
 
@@ -27,7 +28,8 @@ export default function InstitutionUsersCard({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
   const filtered = users.filter((user) => {
-    if (search && !user.email.toLowerCase().includes(search.toLowerCase())) {
+    const searchValue = `${getUserDisplayName(user)} ${user.email}`.toLowerCase()
+    if (search && !searchValue.includes(search.toLowerCase())) {
       return false
     }
     if (roleFilter !== 'all' && user.role.toLowerCase() !== roleFilter) {
@@ -79,7 +81,7 @@ export default function InstitutionUsersCard({
           <input
             type="search"
             className="um-search-input"
-            placeholder="Search by email…"
+            placeholder="Search by name or email..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             aria-label="Search users"
@@ -158,6 +160,8 @@ export default function InstitutionUsersCard({
                 const isActive = managedUser.accountState.toLowerCase() === 'active'
                 const isInactive = managedUser.accountState.toLowerCase() === 'inactive'
                 const canToggle = canToggleUserStatus(currentUser, managedUser)
+                const displayName = getUserDisplayName(managedUser)
+                const initials = getUserInitials(managedUser)
 
                 const menuItems = [
                   canToggle
@@ -186,13 +190,11 @@ export default function InstitutionUsersCard({
                     <td>
                       <div className="um-user-cell">
                         <span className="um-user-avatar">
-                          {managedUser.email.charAt(0).toUpperCase()}
+                          {initials}
                         </span>
                         <div>
-                          <strong>{managedUser.email}</strong>
-                          {managedUser.institutionName && (
-                            <span className="um-table-sub">{managedUser.institutionName}</span>
-                          )}
+                          <strong>{displayName}</strong>
+                          <span className="um-table-sub">{managedUser.email}</span>
                         </div>
                       </div>
                     </td>

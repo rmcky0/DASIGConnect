@@ -2,7 +2,6 @@ import { useState, useEffect, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import type { User } from "../../types/auth.types";
 import {
-  createInstitution,
   getPendingInvitationCount,
   getUserCounts,
   listInstitutions,
@@ -11,6 +10,7 @@ import {
   listSubmissions,
   type SubmissionSummary,
 } from "../../api/submissionApi";
+import { getGreetingName } from "../../lib/userIdentity";
 
 interface DashboardScreenProps {
   user: User;
@@ -56,7 +56,6 @@ const emptyContributorActivity: ActivityItem[] = [];
 
 export default function DashboardScreen({ user }: DashboardScreenProps) {
   const navigate = useNavigate();
-  const [openModal, setOpenModal] = useState<"institution" | null>(null);
   const [institutions, setInstitutions] = useState<
     { id: string; name: string; code: string; emailDomain: string }[]
   >([]);
@@ -181,87 +180,24 @@ export default function DashboardScreen({ user }: DashboardScreenProps) {
     };
   }, [user?.role, user?.institutionId, institutions]);
 
-  const [instName, setInstName] = useState("");
-  const [instDomain, setInstDomain] = useState("");
-  const [instLoading, setInstLoading] = useState(false);
-  const [instError, setInstError] = useState("");
-  const [instSuccess, setInstSuccess] = useState<{
-    id: string;
-    name: string;
-    code: string;
-  } | null>(null);
 
-  const handleCloseModals = () => {
-    setOpenModal(null);
-    setInstName("");
-    setInstDomain("");
-    setInstError("");
-    setInstSuccess(null);
-  };
-
-  const handleProvisionInstitution = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setInstError("");
-    setInstSuccess(null);
-
-    const name = instName.trim();
-    const domain = normalizeDomain(instDomain);
-    const code = generateInstitutionCode(name, domain);
-
-    if (!name || !domain) {
-      setInstError("All fields are required.");
-      return;
-    }
-
-    if (!isValidDomain(domain)) {
-      setInstError("Enter a valid email domain (e.g. su.edu.ph).");
-      return;
-    }
-
-    setInstLoading(true);
-    try {
-      const response = await createInstitution(name, code, domain);
-      const newInst = {
-        id: response.data.id,
-        name: response.data.name,
-        code: response.data.institutionCode,
-      };
-      const updated = [
-        ...institutions,
-        { ...newInst, emailDomain: response.data.emailDomain },
-      ];
-      setInstitutions(updated);
-      setInstSuccess(newInst);
-      setInstName("");
-      setInstDomain("");
-    } catch (err: unknown) {
-      setInstError(
-        getApiErrorMessage(
-          err,
-          "An error occurred while provisioning the workspace.",
-        ),
-      );
-    } finally {
-      setInstLoading(false);
-    }
+  const actionRoutes: Record<string, string> = {
+    "Submit Event Content": "/submissions/new",
+    "Add Institution": "/admin/institution-management",
+    "Invite Members": "/admin/institution-management",
+    "Institution Overview": "/admin/institution-management",
+    "User Management": "/admin/user-management/invitations",
+    "Invite Contributor": "/admin/user-management/invitations",
   };
 
   const handleActionClick = (title: string) => {
-    if (title === "Submit Event Content") {
-      navigate("/submissions/new");
-      return;
-    }
-    if (title === "Invite Users") {
-      navigate("/admin/user-management/invitations");
-      return;
-    }
-    if (title === "Manage Contributors") {
-      navigate("/admin/user-management/invitations");
-      return;
-    }
+    const path = actionRoutes[title];
+    if (!path) return;
     if (title === "Add Institution") {
-      setOpenModal("institution");
+      navigate(path, { state: { openAddInstitution: true } });
+      return;
     }
+    navigate(path);
   };
 
   return (
@@ -324,40 +260,23 @@ export default function DashboardScreen({ user }: DashboardScreenProps) {
           <i className="ti ti-bolt"></i> Quick Actions
         </div>
         <div className="action-grid" id="action-grid">
-          {actionsForRole(user).map((action) => {
-            const isClickable =
-              (user?.role === "admin" &&
-                (action.title === "Invite Users" ||
-                  action.title === "Add Institution")) ||
-              (user?.role === "validator" &&
-                action.title === "Manage Contributors");
-            const Element = isClickable ? "button" : "div";
-            return (
-              <Element
-                key={action.title}
-                className={`action-card${isClickable ? " action-card-clickable" : ""}`}
-                style={
-                  action.emphasized
-                    ? { border: "1.5px solid #BFDBFE" }
-                    : undefined
-                }
-                onClick={
-                  isClickable
-                    ? () => handleActionClick(action.title)
-                    : undefined
-                }
-                type={isClickable ? "button" : undefined}
-              >
-                <div className={`action-card-icon ${action.accent}`}>
-                  <i className={action.icon}></i>
-                </div>
-                <div className="action-card-text">
-                  <div className="action-title">{action.title}</div>
-                  <div className="action-sub">{action.subtitle}</div>
-                </div>
-              </Element>
-            );
-          })}
+          {actionsForRole(user).map((action) => (
+            <button
+              key={action.title}
+              type="button"
+              className="action-card action-card-clickable"
+              style={action.emphasized ? { border: "1.5px solid #BFDBFE" } : undefined}
+              onClick={() => handleActionClick(action.title)}
+            >
+              <div className={`action-card-icon ${action.accent}`}>
+                <i className={action.icon}></i>
+              </div>
+              <div className="action-card-text">
+                <div className="action-title">{action.title}</div>
+                <div className="action-sub">{action.subtitle}</div>
+              </div>
+            </button>
+          ))}
         </div>
 
         <div className="section-title">
@@ -426,110 +345,6 @@ export default function DashboardScreen({ user }: DashboardScreenProps) {
           </table>
         </div>
 
-        {openModal === "institution" && (
-          <div className="dash-modal-backdrop" onClick={handleCloseModals}>
-            <div
-              className="dash-modal-card"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="dash-modal-header">
-                <div>
-                  <div className="dash-modal-title">Add Institution</div>
-                  <div className="dash-modal-sub">
-                    Provision a new HEI workspace and bind its email domain.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="dash-modal-close"
-                  onClick={handleCloseModals}
-                  aria-label="Close"
-                >
-                  <i className="ti ti-x"></i>
-                </button>
-              </div>
-
-              <form onSubmit={handleProvisionInstitution}>
-                <div className="dash-field">
-                  <label className="dash-field-label">Institution Name</label>
-                  <input
-                    className="dash-input"
-                    placeholder="Silliman University"
-                    value={instName}
-                    onChange={(event) => setInstName(event.target.value)}
-                  />
-                </div>
-
-                <div className="dash-field">
-                  <label className="dash-field-label">
-                    Associated Email Domain
-                  </label>
-                  <input
-                    className="dash-input"
-                    placeholder="su.edu.ph"
-                    value={instDomain}
-                    onChange={(event) => setInstDomain(event.target.value)}
-                  />
-                  <div className="dash-field-hint">
-                    Used to auto-route contributors and apply institution
-                    branding.
-                  </div>
-                </div>
-
-                <div className="dash-inline-field">
-                  <div>
-                    <div className="dash-inline-label">
-                      Generated Institution Code
-                    </div>
-                    <div className="dash-inline-sub">
-                      Based on name/domain. You can edit later.
-                    </div>
-                  </div>
-                  <div className="dash-pill">
-                    {generateInstitutionCode(
-                      instName,
-                      normalizeDomain(instDomain),
-                    ) || "AUTO"}
-                  </div>
-                </div>
-
-                {instError && (
-                  <div className="alert alert-err">
-                    <i className="ti ti-alert-circle"></i>
-                    <div>{instError}</div>
-                  </div>
-                )}
-
-                {instSuccess && (
-                  <div className="alert alert-ok">
-                    <i className="ti ti-circle-check"></i>
-                    <div>
-                      {instSuccess.name} was provisioned. Code:{" "}
-                      {instSuccess.code}
-                    </div>
-                  </div>
-                )}
-
-                <div className="dash-modal-actions">
-                  <button
-                    type="button"
-                    className="btn-ghost"
-                    onClick={handleCloseModals}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn-primary"
-                    disabled={instLoading}
-                  >
-                    {instLoading ? "Provisioning..." : "Add Institution"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -576,7 +391,7 @@ function greeting(user: User | null) {
   const hour = new Date().getHours();
   const label =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const name = user?.name?.split(" ")[0] ?? "there";
+  const name = getGreetingName(user);
   return `${label}, ${name}.`;
 }
 
@@ -730,50 +545,38 @@ function actionsForRole(user: User | null): ActionItem[] {
   if (user.role === "admin") {
     return [
       {
-        icon: "ti ti-user-plus",
-        accent: "ac-blue",
-        title: "Invite Users",
-        subtitle: "Batch invite Contributors by institution",
-      },
-      {
-        icon: "ti ti-building-plus",
+        icon: "ti ti-building-community",
         accent: "ac-green",
         title: "Add Institution",
         subtitle: "Provision a new HEI workspace",
       },
       {
-        icon: "ti ti-calendar-plus",
-        accent: "ac-gold",
-        title: "Schedule Post",
-        subtitle: "Assign approved content to Facebook queue",
+        icon: "ti ti-user-plus",
+        accent: "ac-blue",
+        title: "Invite Members",
+        subtitle: "Send invitations to contributors and validators",
       },
       {
-        icon: "ti ti-chart-bar",
+        icon: "ti ti-layout-grid",
         accent: "ac-purple",
-        title: "View Analytics",
-        subtitle: "Facebook reach & engagement overview",
+        title: "Institution Overview",
+        subtitle: "Browse and manage all registered workspaces",
       },
     ];
   }
   if (user.role === "validator") {
     return [
       {
-        icon: "ti ti-clipboard-list",
-        accent: "ac-gold",
-        title: "Review Queue",
-        subtitle: "0 submissions awaiting your approval",
-      },
-      {
-        icon: "ti ti-user-check",
+        icon: "ti ti-users",
         accent: "ac-blue",
-        title: "Manage Contributors",
+        title: "User Management",
         subtitle: "View and manage institution members",
       },
       {
-        icon: "ti ti-history",
+        icon: "ti ti-user-plus",
         accent: "ac-green",
-        title: "Approval History",
-        subtitle: "View all past approvals and rejections",
+        title: "Invite Contributor",
+        subtitle: "Send an invitation to a new contributor",
       },
     ];
   }
@@ -784,18 +587,6 @@ function actionsForRole(user: User | null): ActionItem[] {
       title: "Submit Event Content",
       subtitle: "Upload photos, videos & captions",
       emphasized: true,
-    },
-    {
-      icon: "ti ti-history",
-      accent: "ac-green",
-      title: "My Submissions",
-      subtitle: "Track status of your submissions",
-    },
-    {
-      icon: "ti ti-bulb",
-      accent: "ac-gold",
-      title: "Content Guidelines",
-      subtitle: "What to submit and how to tag it",
     },
   ];
 }
@@ -809,40 +600,3 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function normalizeDomain(domain: string) {
-  return domain.trim().toLowerCase().replace(/^@/, "");
-}
-
-function isValidDomain(domain: string) {
-  return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain);
-}
-
-function getApiErrorMessage(error: unknown, fallback: string) {
-  if (!isRecord(error)) return fallback;
-  const response = error.response;
-  if (isRecord(response)) {
-    const data = response.data;
-    if (isRecord(data)) {
-      if (typeof data.error === "string") return data.error;
-      if (typeof data.message === "string") return data.message;
-    }
-  }
-  return typeof error.message === "string" ? error.message : fallback;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function generateInstitutionCode(name: string, domain: string) {
-  const domainPrefix = domain.split(".")[0] || "";
-  if (domainPrefix.length > 1) {
-    return domainPrefix.toUpperCase();
-  }
-  const parts = name
-    .replace(/[^A-Za-z0-9 ]/g, " ")
-    .split(" ")
-    .filter(Boolean);
-  const initials = parts.map((part) => part.charAt(0)).join("");
-  return initials.toUpperCase() || "INST";
-}

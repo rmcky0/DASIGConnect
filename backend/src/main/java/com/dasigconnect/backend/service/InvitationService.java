@@ -152,6 +152,8 @@ public class InvitationService {
         user.setEmail(token.getRecipientEmail());
         user.setRole(token.getAssignedRole());
         user.setInstitution(token.getInstitution());
+        user.setFirstName(normalizeName(dto.firstName()));
+        user.setLastName(normalizeName(dto.lastName()));
         user.setPasswordHash(passwordEncoder.encode(dto.password()));
         user.setAccountState(UserStatus.active);
         userRepository.save(user);
@@ -164,7 +166,11 @@ public class InvitationService {
                 "INVITATION_ACCEPTED",
                 null, null,
                 user.getId(),
-                Map.of("email", user.getEmail(), "role", user.getRole().name()));
+                Map.of(
+                        "email", user.getEmail(),
+                        "role", user.getRole().name(),
+                        "firstName", user.getFirstName(),
+                        "lastName", user.getLastName()));
 
         String jwt = jwtService.generateAccessToken(user);
         UUID institutionId = user.getInstitution().getId();
@@ -178,6 +184,10 @@ public class InvitationService {
         if (token.getExpiresAt().isBefore(Instant.now())) {
             throw new ResponseStatusException(HttpStatus.GONE, "Invitation has expired");
         }
+    }
+
+    private String normalizeName(String value) {
+        return value == null ? null : value.trim().replaceAll("\\s+", " ");
     }
 
     private User createPendingUser(String email, UserRole role, Institution institution) {

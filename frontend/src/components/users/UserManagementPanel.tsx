@@ -1,5 +1,6 @@
 import type { UserProfileResponse } from '../../api/authApi'
 import type { User } from '../../types/auth.types'
+import { getUserDisplayName } from '../../lib/userIdentity'
 
 interface UserManagementPanelProps {
   currentUser: User | null
@@ -39,27 +40,30 @@ export default function UserManagementPanel({
         <div className="dash-empty-row">No users found.</div>
       ) : (
         <div className="dash-compact-list">
-          {users.map((managedUser) => (
-            <button
-              type="button"
-              className={`dash-compact-row dash-user-row${
-                selectedUserId === managedUser.id ? ' is-selected' : ''
-              }`}
-              key={managedUser.id}
-              onClick={() => onSelectUser(selectedUserId === managedUser.id ? null : managedUser.id)}
-              aria-expanded={selectedUserId === managedUser.id}
-            >
-              <div>
-                <div className="dash-compact-primary">{managedUser.email}</div>
-                <div className="dash-compact-meta">
-                  {formatRoleLabel(managedUser.role)} - {formatAccountState(managedUser.accountState)}
+          {users.map((managedUser) => {
+            const displayName = getUserDisplayName(managedUser)
+            return (
+              <button
+                type="button"
+                className={`dash-compact-row dash-user-row${
+                  selectedUserId === managedUser.id ? ' is-selected' : ''
+                }`}
+                key={managedUser.id}
+                onClick={() => onSelectUser(selectedUserId === managedUser.id ? null : managedUser.id)}
+                aria-expanded={selectedUserId === managedUser.id}
+              >
+                <div>
+                  <div className="dash-compact-primary">{displayName}</div>
+                  <div className="dash-compact-meta">
+                    {managedUser.email} - {formatRoleLabel(managedUser.role)}
+                  </div>
                 </div>
-              </div>
-              <span className={`dash-state-pill ${stateClass(managedUser.accountState)}`}>
-                {formatAccountState(managedUser.accountState)}
-              </span>
-            </button>
-          ))}
+                <span className={`dash-state-pill ${stateClass(managedUser.accountState)}`}>
+                  {formatAccountState(managedUser.accountState)}
+                </span>
+              </button>
+            )
+          })}
         </div>
       )}
 
@@ -67,9 +71,9 @@ export default function UserManagementPanel({
         <div className="dash-user-action-panel">
           <div className="dash-user-action-head">
             <div>
-              <div className="dash-user-action-title">{selectedUser.email}</div>
+              <div className="dash-user-action-title">{getUserDisplayName(selectedUser)}</div>
               <div className="dash-user-action-sub">
-                {formatRoleLabel(selectedUser.role)} - {selectedUser.institutionName || 'Institution account'}
+                {selectedUser.email} - {formatRoleLabel(selectedUser.role)}
               </div>
             </div>
             <span className={`dash-state-pill ${stateClass(selectedUser.accountState)}`}>

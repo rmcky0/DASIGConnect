@@ -135,7 +135,7 @@ class InvitationControllerTest {
         mockMvc.perform(post("/api/v1/invitations/accept")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                                {"token":"sometoken","password":"password123"}
+                                {"token":"sometoken","firstName":"Mark","lastName":"Camoro","password":"password123"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("new.jwt.token"));
@@ -146,10 +146,21 @@ class InvitationControllerTest {
         mockMvc.perform(post("/api/v1/invitations/accept")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                                {"token":"sometoken","password":"short"}
+                                {"token":"sometoken","firstName":"Mark","lastName":"Camoro","password":"short"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fields.password").exists());
+    }
+
+    @Test
+    void acceptInvitation_missingName_returns400() throws Exception {
+        mockMvc.perform(post("/api/v1/invitations/accept")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                                {"token":"sometoken","lastName":"Camoro","password":"password123"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.firstName").exists());
     }
 
     @Test
