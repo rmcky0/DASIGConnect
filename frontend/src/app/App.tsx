@@ -26,6 +26,7 @@ import InviteScreen from "../features/auth/InviteScreen";
 import NoAccountScreen from "../features/auth/NoAccountScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import SubmissionScreen from "../features/submission/SubmissionScreen";
+import ValidationQueueScreen from "../features/validation/ValidationQueueScreen";
 import UserInvitationsScreen from "../features/user-management/UserInvitationsScreen";
 import InstitutionManagementScreen from "../features/institution-management/InstitutionManagementScreen";
 import DashboardLayout from "../components/layout/DashboardLayout";
@@ -57,6 +58,7 @@ function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -124,21 +126,41 @@ function App() {
   }, [inviteFirstName, inviteLastName, invitePassword, inviteConfirmPassword]);
 
   useEffect(() => {
+    let active = true;
     const savedToken = localStorage.getItem("dasigconnect_token");
     const savedUser = localStorage.getItem("dasigconnect_user");
-    if (savedToken && savedUser) {
-      setAuthToken(savedToken);
-      try {
-        const parsedUser = JSON.parse(savedUser) as User;
-        setCurrentUser(parsedUser);
-        startSessionCountdown(savedToken);
-        void refreshCurrentUser(parsedUser);
-      } catch {
-        localStorage.removeItem("dasigconnect_token");
-        localStorage.removeItem("dasigconnect_user");
-      }
+
+    if (!savedToken || !savedUser) {
+      setAuthReady(true);
+      return () => {
+        active = false;
+      };
     }
-    setAuthReady(true);
+
+    setAuthToken(savedToken);
+    queueMicrotask(() => {
+      void (async () => {
+        try {
+          const parsedUser = JSON.parse(savedUser) as User;
+          const user = await loadCurrentUser(parsedUser);
+          if (!active) return;
+          localStorage.setItem("dasigconnect_user", JSON.stringify(user));
+          setCurrentUser(user);
+          startSessionCountdown(savedToken);
+        } catch {
+          localStorage.removeItem("dasigconnect_token");
+          localStorage.removeItem("dasigconnect_user");
+          setAuthToken(null);
+          if (active) setCurrentUser(null);
+        } finally {
+          if (active) setAuthReady(true);
+        }
+      })();
+    });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -227,6 +249,10 @@ function App() {
   async function handleLogin() {
     if (lockRemaining > 0) return;
     setLoginLoading(true);
+    setLoginError("");
+    setAuthToken(null);
+    localStorage.removeItem("dasigconnect_token");
+    localStorage.removeItem("dasigconnect_user");
     const email = loginEmail.trim().toLowerCase();
     try {
       const response = await login(email, loginPassword);
@@ -341,6 +367,8 @@ function App() {
   }
 
   async function handleLogout() {
+    if (logoutLoading) return;
+    setLogoutLoading(true);
     try {
       await logoutRequest();
     } catch {
@@ -356,6 +384,7 @@ function App() {
     resetLoginState();
     navigate("/login");
     toast.info("You have been signed out.");
+    setLogoutLoading(false);
   }
 
   async function handleModalLogin() {
@@ -430,12 +459,6 @@ function App() {
     timerId = window.setInterval(tick, 1000);
     bannerTimerRef.current = timerId;
     setBannerTimerId(timerId);
-  }
-
-  async function refreshCurrentUser(fallbackUser: User) {
-    const user = await loadCurrentUser(fallbackUser);
-    localStorage.setItem("dasigconnect_user", JSON.stringify(user));
-    setCurrentUser(user);
   }
 
   async function validateInviteToken(token: string) {
@@ -601,6 +624,7 @@ function App() {
                 onDismissBanner={dismissSessionBanner}
                 onStayLoggedIn={handleStayLoggedIn}
                 onLogout={() => void handleLogout()}
+                logoutLoading={logoutLoading}
               />
             ) : (
               <Navigate to="/login" replace />
@@ -624,6 +648,14 @@ function App() {
             element={
               <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator"]}>
                 <UserInvitationsScreen user={currentUser!} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/validation/queue"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator"]}>
+                <ValidationQueueScreen user={currentUser!} />
               </ProtectedRoute>
             }
           />

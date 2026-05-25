@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { User } from '../../types/auth.types'
+import Spinner from '../common/Spinner'
 
 export type DashboardNavId = 'home' | 'submit' | 'institution-management' | 'user-management' | 'scheduler' | 'analytics'
 
@@ -14,6 +15,7 @@ interface DashboardShellProps {
   onDismissBanner: () => void
   onStayLoggedIn: () => void
   onLogout: () => void
+  logoutLoading: boolean
   children: ReactNode
 }
 
@@ -35,6 +37,7 @@ export default function DashboardShell({
   onDismissBanner,
   onStayLoggedIn,
   onLogout,
+  logoutLoading,
   children,
 }: DashboardShellProps) {
   const navigate = useNavigate()
@@ -127,9 +130,20 @@ export default function DashboardShell({
                     <i className="ti ti-settings"></i> Account Settings
                   </div>
                   <div className="udrop-sep"></div>
-                  <div className="udrop-item danger" onClick={onLogout}>
-                    <i className="ti ti-logout" style={{ color: 'var(--error)' }}></i> Sign Out
-                  </div>
+                  <button
+                    type="button"
+                    className="udrop-item danger udrop-button"
+                    onClick={onLogout}
+                    disabled={logoutLoading}
+                    aria-busy={logoutLoading}
+                  >
+                    {logoutLoading ? (
+                      <Spinner size="xs" color="inherit" aria-label="Signing out" />
+                    ) : (
+                      <i className="ti ti-logout" style={{ color: 'var(--error)' }}></i>
+                    )}
+                    <span>{logoutLoading ? 'Signing out' : 'Sign Out'}</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -155,7 +169,7 @@ function dashboardNavItems(user: User): DashboardNavItem[] {
       id: 'submit',
       icon: user.role === 'validator' ? 'ti ti-clipboard-list' : 'ti ti-photo-up',
       label: user.role === 'validator' ? 'Review Queue' : 'Submit Content',
-      path: user.role === 'contributor' ? '/submissions/new' : undefined,
+      path: user.role === 'validator' ? '/validation/queue' : '/submissions/new',
       visible: user.role === 'validator' || user.role === 'contributor',
     },
     {
