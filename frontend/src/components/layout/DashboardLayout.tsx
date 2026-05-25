@@ -12,11 +12,13 @@ interface DashboardLayoutProps {
   onDismissBanner: () => void
   onStayLoggedIn: () => void
   onLogout: () => void
+  logoutLoading: boolean
 }
 
 function getActiveNav(pathname: string): DashboardNavId {
   if (pathname.startsWith('/admin/institution-management')) return 'institution-management'
   if (pathname.startsWith('/admin/user-management')) return 'user-management'
+  if (pathname.startsWith('/validation')) return 'submit'
   if (pathname.startsWith('/submissions')) return 'submit'
   if (pathname.startsWith('/scheduler')) return 'scheduler'
   if (pathname.startsWith('/analytics')) return 'analytics'
@@ -32,6 +34,7 @@ export default function DashboardLayout({
   onDismissBanner,
   onStayLoggedIn,
   onLogout,
+  logoutLoading,
 }: DashboardLayoutProps) {
   const { pathname } = useLocation()
   return (
@@ -45,6 +48,7 @@ export default function DashboardLayout({
       onDismissBanner={onDismissBanner}
       onStayLoggedIn={onStayLoggedIn}
       onLogout={onLogout}
+      logoutLoading={logoutLoading}
     >
       <PageTransition>
         <Outlet />

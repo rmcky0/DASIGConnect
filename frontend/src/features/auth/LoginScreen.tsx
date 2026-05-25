@@ -1,6 +1,7 @@
 import Screen from '../../components/layout/Screen'
 import LeftPanel from '../../components/layout/LeftPanel'
 import RightPanel from '../../components/layout/RightPanel'
+import Spinner from '../../components/common/Spinner'
 
 interface LoginScreenProps {
   active: boolean
@@ -228,7 +229,9 @@ export default function LoginScreen({
               onClick={onLogin}
               disabled={loading}
             >
-              <i className="ti ti-login"></i> {loading ? 'Signing In...' : 'Sign In'}
+              <i className="ti ti-login"></i>
+              <span>{loading ? 'Signing In' : 'Sign In'}</span>
+              {loading && <Spinner size="xs" color="white" aria-label="Signing in" />}
             </button>
           </div>
 

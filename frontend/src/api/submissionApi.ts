@@ -24,6 +24,7 @@ export interface SubmissionSummary {
   id: string;
   institutionId: string;
   institutionName?: string;
+  contributorEmail?: string;
   eventTitle: string;
   eventDate: string;
   caption?: string;
@@ -31,6 +32,7 @@ export interface SubmissionSummary {
   status: SubmissionStatus;
   scheduledAt?: string;
   submittedAt?: string;
+  createdAt?: string;
   updatedAt?: string;
   mediaCount?: number;
   category?: string;
