@@ -100,24 +100,33 @@ public class FacebookPublisherService {
     /**
      * On startup, sync the env-supplied page access token to the DB if no active
      * token exists for this page. The DB record is the runtime source of truth.
+     *
+     * Note: @Transactional does not apply to @PostConstruct — Spring calls this
+     * method on the raw bean before the CGLIB proxy is in place. The repository
+     * methods manage their own transactions, so no outer transaction is needed.
+     * A try-catch ensures a missing table (e.g. migration not yet applied on first
+     * deploy) degrades to a warning rather than crashing the application context.
      */
     @PostConstruct
-    @Transactional
     public void syncTokenFromEnv() {
         if (!isConfigured() || !tokenEncryptionService.isConfigured()) {
             log.warn("FacebookPublisherService: page token or encryption not configured — publishing disabled.");
             return;
         }
-        pageTokenRepository.findByPageIdAndIsActiveTrue(pageId).ifPresentOrElse(
-                existing -> log.info("Facebook page token already present for page {}.", pageId),
-                () -> {
-                    FacebookPageToken token = new FacebookPageToken();
-                    token.setPageId(pageId);
-                    token.setEncryptedToken(tokenEncryptionService.encryptToken(pageAccessToken));
-                    pageTokenRepository.save(token);
-                    log.info("Facebook page token synced from env for page {}.", pageId);
-                }
-        );
+        try {
+            pageTokenRepository.findByPageIdAndIsActiveTrue(pageId).ifPresentOrElse(
+                    existing -> log.info("Facebook page token already present for page {}.", pageId),
+                    () -> {
+                        FacebookPageToken token = new FacebookPageToken();
+                        token.setPageId(pageId);
+                        token.setEncryptedToken(tokenEncryptionService.encryptToken(pageAccessToken));
+                        pageTokenRepository.save(token);
+                        log.info("Facebook page token synced from env for page {}.", pageId);
+                    }
+            );
+        } catch (Exception ex) {
+            log.error("FacebookPublisherService: token sync failed at startup — publishing disabled until next restart. Cause: {}", ex.getMessage());
+        }
     }
 
     /**
