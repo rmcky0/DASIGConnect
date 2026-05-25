@@ -13,8 +13,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import org.springframework.context.ApplicationEventPublisher;
+
+import com.dasigconnect.backend.event.SubmissionRescheduledEvent;
+import com.dasigconnect.backend.exception.GuardRailViolationException;
 import com.dasigconnect.backend.exception.MediaAssetNotFoundException;
 import com.dasigconnect.backend.exception.SubmissionNotFoundException;
+import com.dasigconnect.backend.model.dto.submission.RescheduleRequestDto;
 import com.dasigconnect.backend.model.dto.guardrail.GuardRailResult;
 import com.dasigconnect.backend.model.dto.media.MediaAssetSummaryDto;
 import com.dasigconnect.backend.model.dto.submission.AttachAssetDto;
@@ -70,6 +75,7 @@ public class SubmissionService {
     private final SupabaseStorageService supabaseStorageService;
     private final NotificationService notificationService;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -86,7 +92,8 @@ public class SubmissionService {
             AuditLogService auditLogService,
             SupabaseStorageService supabaseStorageService,
             NotificationService notificationService,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            ApplicationEventPublisher eventPublisher) {
         this.submissionRepository = submissionRepository;
         this.mediaAssetRepository = mediaAssetRepository;
         this.submissionMediaAssetRepository = submissionMediaAssetRepository;
@@ -96,6 +103,7 @@ public class SubmissionService {
         this.supabaseStorageService = supabaseStorageService;
         this.notificationService = notificationService;
         this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -381,6 +389,55 @@ public class SubmissionService {
 
         log.info("Existing asset {} attached to submission {} by contributor {}", asset.getId(), submissionId, user.userId());
         return buildResponse(submissionRepository.findById(submissionId).orElseThrow());
+    }
+
+    // ── UC-3.1 Admin Reschedule ───────────────────────────────────────────────
+
+    /**
+     * Allows an Administrator to move a SCHEDULED submission to a new slot.
+     *
+     * Guard rails are re-evaluated. Hard violations block the move unless the
+     * admin supplies an overrideReason, which is then written to the audit log.
+     */
+    public SubmissionResponseDto reschedule(UUID submissionId, RescheduleRequestDto dto, JwtUserDetails user) {
+        Submission submission = submissionRepository.findById(submissionId)
+                .orElseThrow(() -> new SubmissionNotFoundException(submissionId));
+
+        if (submission.getStatus() != SubmissionStatus.scheduled) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only SCHEDULED submissions can be rescheduled. Current status: " + submission.getStatus());
+        }
+
+        Instant originalSlot = submission.getScheduledAt();
+        Instant newSlot = dto.getScheduledAt();
+
+        GuardRailResult guardRailResult = guardRailService.validate(submission.getInstitution().getId(), newSlot);
+        if (guardRailResult.isBlocked()) {
+            if (dto.getOverrideReason() == null || dto.getOverrideReason().isBlank()) {
+                throw new GuardRailViolationException(guardRailResult.getHardBlocks());
+            }
+            auditLogService.record(
+                    entityManager.getReference(User.class, user.userId()),
+                    "ADMIN_RESCHEDULE_OVERRIDE",
+                    null, null,
+                    submissionId,
+                    Map.of(
+                        "originalSlot", originalSlot.toString(),
+                        "newSlot", newSlot.toString(),
+                        "overrideReason", dto.getOverrideReason(),
+                        "violations", guardRailResult.getHardBlocks().toString()
+                    )
+            );
+        }
+
+        slotReservationService.reserveLockedSlot(submissionId, submission.getInstitution().getId(), newSlot);
+        submission.setScheduledAt(newSlot);
+        submissionRepository.save(submission);
+
+        log.info("Admin {} rescheduled submission {} from {} to {}", user.userId(), submissionId, originalSlot, newSlot);
+        eventPublisher.publishEvent(new SubmissionRescheduledEvent(submission, originalSlot, newSlot));
+
+        return buildResponse(submission);
     }
 
     // ── Private Helpers ──────────────────────────────────────────────────────

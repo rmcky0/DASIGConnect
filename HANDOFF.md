@@ -1,96 +1,93 @@
-# Handoff - 2026-05-22
+# Handoff - 2026-05-26
 
-Current branch: `feature/uc13-submission-backend`
+Current branch: `module3`
 
 ## Status
 
-### Backend
+### UC-3.1 Publishing Pipeline & Master Calendar — COMPLETE
 
-- Done: UC-1.3 submission backend endpoints on `/api/v1/submissions`.
-- Done: required merge-blocking tests:
-  - `SubmissionServiceTest`
-  - `SubmissionControllerTest`
-  - `UserServiceTest`
-  - `UserControllerTest`
-- Done: `GlobalExceptionHandler` now returns `400 Bad Request` for missing request parameters instead of falling through to generic server error handling.
-- Done: `InstitutionController` now exposes canonical `/api/v1/institutions` and keeps `/api/v1/admin/institutions` as a legacy alias.
-- Done: M2 stragglers remain in place: resend invitation, `GET /me`, scoped user listing, and user role counts.
-- Done: pending invitation endpoints are available on `/api/v1/invitations/pending` and `/api/v1/invitations/pending/count`.
-- Done: invitation lifecycle is hardened so creating/resending an invitation invalidates older unused, unexpired tokens for the same recipient email.
-- Done: `GET /api/v1/users/counts` now applies the same validator institution scope rule as user listing.
-- Done: Flyway duplicate version conflict fixed by keeping `V3__ensure_institution_email_domain.sql` and renaming the media migration to `V4__media_assets.sql`.
-- Done: local datasource config supports `DASIG_DATABASE_*` overrides first, then standard `DATABASE_*` variables, with a local JDBC fallback. This avoids accidental unresolved/provider-style database URLs during local runs.
-- Done: backend Supabase config supports `DASIG_SUPABASE_URL`, `DASIG_SUPABASE_SERVICE_ROLE_KEY`, and `DASIG_SUPABASE_STORAGE_BUCKET`.
-- Done: Flyway fresh Supabase startup is fixed by using baseline version `0`; a new Supabase `public` schema now baselines at `0` and runs V1 through V4 instead of skipping V1.
-- Done locally: guard rail enforcement can be disabled with `APP_GUARDRAILS_ENFORCED=false` for testing. Local default is currently false so GR-H1/GR-H2/GR-H3 do not block draft save or submit-for-review testing.
-- Done locally: guard rail reservation failures return structured `422` responses with violation details instead of generic internal server errors.
+All 19 new files and 3 modified files from the UC-3.1 backend plan have been implemented and verified.
 
-### Frontend
+**Database (Flyway V12):**
+- `publication_attempts` table — records every Facebook Graph API publish attempt (success/failed, error detail, staged photo IDs for orphan cleanup).
+- `facebook_page_tokens` table — encrypted DB-backed token store; no RLS (administrator data only).
 
-- Done: submission API wiring now matches the backend:
-  - `POST /api/v1/submissions` for draft creation.
-  - `POST /api/v1/submissions/{id}/evaluate-slot` with `{ scheduledAt }`.
-  - Direct browser upload to Supabase Storage, then `POST /api/v1/submissions/{id}/media` with `{ storageUrl, fileName, fileType, fileSizeBytes }`.
-  - `GET/POST /api/v1/institutions`.
-  - Lookup typing now matches backend constants: file types, size limits, media limits, and schedule lead windows.
-- Done: reset password screen and `/reset-password` route are wired to `POST /api/v1/auth/reset-password`.
-- Done: session warning infrastructure now reads JWT `exp`, starts a five-minute countdown, and opens the expiry modal at timeout.
-- Done: dashboard stat tiles are no longer all hardcoded zero; they use live submission/user/institution/pending-invitation endpoints where backend support exists.
-- Done: app auth state hydrates from `GET /api/v1/me` after login, invite accept, session modal relogin, and saved-token restore. This prevents Gmail/domain guessing from overriding the real institution.
-- Done: invite/manage modal now lists pending invitations and current users for the selected institution, including resend actions for active pending invites.
-- Done locally: user management now has a reusable `UserManagementPanel` with selected-user details and deactivate/reactivate actions wired to `PATCH /api/v1/users/{id}/status`.
-- Done locally: invite validator flow warns when the selected institution already has active validators, but allows the administrator to proceed after confirmation.
-- Done locally: `.jpg` files are normalized to `jpeg` for submission readiness and backend media metadata.
-- Done locally: submission queue styling has been improved with a clearer left-side queue panel, count badge, item containers, hover state, and active state.
-- Done locally: frontend submit buttons are no longer blocked by readiness score during testing, and draft payloads use safe defaults for blank required backend fields.
-- Done locally: `frontend/.env.local` points Vite to `http://localhost:8080/api/v1` and contains the Supabase browser upload variables for the `dasigconnect-media` bucket. This file is intentionally ignored and should not be committed.
+**Entities & Repositories:**
+- `PublicationAttempt` — JPA entity for attempt records; `@ManyToOne(LAZY)` to `Submission`.
+- `FacebookPageToken` — JPA entity for encrypted token; `@PrePersist`/`@PreUpdate` timestamps.
+- `PublicationAttemptRepository` — `findTopBySubmissionIdOrderByAttemptedAtDesc`, `countBySubmissionId`.
+- `FacebookPageTokenRepository` — `findByPageIdAndIsActiveTrue`.
+
+**Token Security:**
+- `TokenEncryptionService` — AES-256-GCM; key = SHA-256(FACEBOOK_APP_SECRET); IV stored as `base64(iv):base64(ciphertext+tag)`. Token is never logged.
+
+**Calendar API:**
+- `CalendarEventDto` — dual factory methods: `full()` for own institution / admin, `masked()` for other institutions (title is null).
+- `CalendarService` — `getCalendarEvents(JwtUserDetails)` switches on role: admin gets all slots full, contributors/validators get own institution full + others masked.
+- `CalendarController`:
+  - `GET /api/v1/calendar` — authenticated, returns scheduled slots.
+  - `PATCH /api/v1/submissions/{id}/reschedule` — admin only; validates guard rails, supports override with audit trail.
+- `RescheduleRequestDto` — `scheduledAt` (required) + `overrideReason` (required only when hard guard rail violated).
+- `SubmissionService.reschedule()` — guard rail check → hard violation without override → 422; hard violation with override → audit log ADMIN_RESCHEDULE_OVERRIDE → proceed.
+- `SlotReservationService.reserveLockedSlot()` — creates a locked reservation directly for admin reschedule.
+
+**Facebook Publishing:**
+- `FacebookPublisherService` — Java HttpClient (mirrors `SupabaseStorageService`). `@PostConstruct` syncs env token to DB if no active token exists. Handles:
+  - Photo-only: 2-step (stage unpublished → feed post with `attached_media`). Cleanup of staged photos on step-2 failure.
+  - Video-only: single POST to `/{PAGE_ID}/videos`.
+  - Mixed media: immediate PUBLISH_FAILED (pilot constraint).
+  - GR-T5 retry: 3 attempts, backoff 5s → 25s → 125s via `Thread.sleep()`.
+  - `recordAttempt()` — `@Transactional`, writes `PublicationAttempt` after each attempt.
+  - `markPublished()` / `markFailed()` — `@Transactional`, state transitions + events.
+  - `validateToken()` — calls Graph API `debug_token`; updates `last_validated_at` in DB; returns `Instant` or null.
+  - **CRITICAL**: `publish()` is called outside any active DB transaction by the scheduler (HikariCP 5-connection constraint).
+
+**Scheduler Jobs:**
+- `PublishingSchedulerJob` — `@Scheduled(cron = "0 * * * * *")`, every minute. Loads due submissions in a short read transaction, then calls `facebookPublisherService.publish()` outside transaction.
+- `StaleSubmissionDetectorJob` — `@Scheduled(cron = "0 */5 * * * *")`, every 5 min. GR-T9: finds SCHEDULED submissions with missed windows → PUBLISH_FAILED + `PublishFailedEvent`.
+- `TokenHealthCheckJob` — `@Scheduled(cron = "0 0 8 * * *")`, daily 08:00 UTC. GR-T4: invalid token → `TokenValidationFailedEvent`; expiry ≤7 days → `TokenExpiryWarningEvent`.
+
+**Resolution Center (UC-3.4):**
+- `FailedPublicationDto` — response DTO (submissionId, eventTitle, institutionId/Name, scheduledAt, retryCount, lastAttemptAt, lastError, manualPublishInProgress).
+- `ManualPublishCompleteDto` — request DTO (optional postUrl must match `https://www.facebook.com/*`, optional notes).
+- `ManualPublishingService` — start/complete/cancel/retry/clearAbandoned; audit log written on complete via `AuditLogService`.
+- `ResolutionController` — `@PreAuthorize("hasRole('ADMINISTRATOR')")`, base path `/api/v1/resolution`:
+  - `GET /failures` — lists PUBLISH_FAILED submissions with last attempt detail.
+  - `POST /{id}/retry` — PUBLISH_FAILED → SCHEDULED, resets retryCount.
+  - `POST /{id}/manual-publish/start` — records `manualPublishStartedAt`.
+  - `POST /{id}/manual-publish/complete` — transitions → PUBLISHED_MANUAL, fires `PostPublishedManualEvent`.
+  - `POST /{id}/manual-publish/cancel` — clears `manualPublishStartedAt`.
+- `AbandonmentDetectorJob` — `@Scheduled(cron = "0 */5 * * * *")`, every 5 min; clears sessions open >2 hours.
+
+**Config:**
+- `application.properties` — `app.facebook.*` properties added (`page-access-token`, `page-id`, `app-id`, `app-secret`, `api-version`), each backed by env vars with empty-string defaults for graceful degradation.
+
+### Previous Session (UC-1.3) — still on `feature/uc13-submission-backend`, not yet merged
+
+See prior HANDOFF.md content for UC-1.3 details. That branch is still pending merge/review.
 
 ## Verification
 
-- Frontend: `npm.cmd run build` passed.
-- Backend focused auth/onboarding verification: `.\mvnw.cmd '-Dtest=InvitationServiceTest,InvitationControllerTest,UserServiceTest,UserControllerTest' test` passed.
-- Backend focused result: `Tests run: 50, Failures: 0, Errors: 0, Skipped: 0`.
-- Backend: `mvn test` passed using the local Maven distribution because `.\mvnw.cmd` fails in this PowerShell environment.
-- Backend result: `Tests run: 163, Failures: 0, Errors: 0, Skipped: 0`.
-- Flyway duplicate migration check: source and generated `target/classes/db/migration` now have unique versions `V1`, `V2`, `V3`, and `V4`; `mvn clean` and `mvn -DskipTests package` passed.
-- Fresh Supabase DB check: backend applied V1 through V4 successfully, then a second startup validated migrations and started with 0 pending migrations.
-- Latest frontend check after local Supabase env wiring: `npm.cmd run build` passed.
-- Latest focused submission backend check: `SlotReservationServiceTest`, `SubmissionServiceTest`, and `SubmissionControllerTest` passed.
-- Latest focused submission backend result: 42 tests, 0 failures, 0 errors.
-
-Backend test command used:
-
-```powershell
-& "$env:USERPROFILE\.m2\wrapper\dists\apache-maven-3.9.15\0226a00282e400185496f3b60ec5a3f029cbdc6893912937d4876d57695224e1\bin\mvn.cmd" test
-```
+- Backend: `mvn test` → **208 tests, 0 failures, 0 errors** (all 163 prior tests pass + UC-3.1 additions).
+- Maven used: direct from `.m2/wrapper/dists/apache-maven-3.9.15/9925cc1d/bin/mvn` (mvnw.cmd fails in this PS environment).
 
 ## Remaining Gaps
 
-- Active Module 1 blocker: save draft and submit-for-review are not yet considered solved. Backend guard rail blocking has been bypassed for testing and frontend payload defaults were added, but the browser flow still needs manual debugging/verification against the current backend and Supabase setup.
-- Submission queue design improved locally, but still needs user/team review with real queue data and responsive/mobile widths.
-- `GET /api/v1/submissions/lookups` does not provide categories, tags, or preferred time slots. The frontend no longer assumes those fields, but richer category/tag UI needs backend support.
-- `AssetPickerModal` / media library still needs UC-2.2 backend: `MediaAssetController`, especially `GET /api/v1/media-assets` and delete behavior.
-- Validator review queue actions still need UC-2.1 backend: approve, reject, needs-revision, and validator/admin transition rules.
-- SSE notifications still need UC-2.3 backend.
-- Analytics still need UC-2.4 backend aggregate endpoints.
-- Calendar, publishing, Facebook fallback, AI captions, and AI recommendations still need UC-3.x backend.
-- No built-in validator account exists. Validators must be invited from the administrator dashboard, accept the invite, and set their password.
-- Supabase browser upload credentials are configured locally. The full browser upload flow still needs manual verification through the submission form. Required frontend env vars are:
-  - `VITE_SUPABASE_URL`
-  - `VITE_SUPABASE_STORAGE_BUCKET`
-  - `VITE_SUPABASE_ANON_KEY`
-- Local frontend/backend connection requires `frontend/.env.local` with `VITE_API_URL=http://localhost:8080/api/v1`.
-- Backend runtime still needs deployment-owned SMTP and Supabase service credentials in deployed environments. Local SMTP and Supabase values are configured through ignored env files.
-- `.\mvnw.cmd` may require network access to resolve dependencies in this environment; rerun with normal Maven/network permissions if dependency resolution fails.
+- **UC-3.1 frontend**: Calendar page (FullCalendar.js + `GET /api/v1/calendar`) and Resolution Center page (`/api/v1/resolution` endpoints) are not yet implemented. The backend is ready.
+- **Live Facebook publish test**: The app is in Facebook Development mode during the pilot — posts are only visible to Meta developer/admin accounts. Full end-to-end test requires valid `FACEBOOK_PAGE_ACCESS_TOKEN`, `FACEBOOK_PAGE_ID`, `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` in the environment.
+- **V12 migration on Supabase**: `V12__publishing.sql` has not yet been applied to the deployed Supabase instance (no RLS policies needed for these tables — they are admin-only).
+- **UC-1.3 merge**: `feature/uc13-submission-backend` is still pending team review and merge into `main`.
+- **UC-2.x**: Content validation (2.1), media repository (2.2), SSE notifications (2.3), and analytics (2.4) not started.
+- **UC-3.2/3.3**: AI caption (Claude Vision) and AI classification/recommendation (Voyage AI) not started.
+- Active Module 1 blocker: save draft / submit-for-review browser flow still needs manual verification.
 
 ## Critical Invariants
 
+- **Never log** the page access token, app secret, or any encrypted token value.
+- HikariCP max pool size = 5 (Supabase Session Pooler hard limit). Always commit the read transaction before calling the Facebook Graph API.
+- Do NOT call `SlotReservationService.confirm()` in the publishing flow — it is already called by `ValidationService` on approval.
+- Mixed media (photo + video in same submission) → immediate PUBLISH_FAILED per SRS pilot constraint.
+- All publish state transitions must write to `audit_log` via `AuditLogService`.
 - `MediaAsset.embedding` is not mapped by Hibernate. Keep pgvector reads/writes in native repository queries.
-- Keep HikariCP max pool size at 5 for Supabase Session Pooler.
-- Keep `DATABASE_USER` / `DATABASE_USERNAME` environment naming aligned with `application.properties` and local `.env`.
-- Prefer local `DASIG_DATABASE_*` variables when testing locally to avoid collisions with provider/system `DATABASE_URL` values.
-- For fresh Supabase projects, keep Flyway baseline version at `0`; baseline version `1` marks V1 as applied without creating Module 1 tables.
-- Media upload pattern is frontend direct-to-Supabase first, backend metadata second. Do not switch Module 1 endpoints to multipart upload.
-- Invitation tokens are single-use in practice: issuing a fresh invite/resend supersedes older open links for the same email.
+- For fresh Supabase projects, keep Flyway baseline version at `0`.
 - Do not log JWTs, reset tokens, invitation tokens, passwords, or API keys.
-- Do not edit generated migration files under `backend/target`; fix Flyway issues only in `backend/src/main/resources/db/migration`.

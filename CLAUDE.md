@@ -94,58 +94,51 @@ React SPA (Vercel) -> Spring Boot REST API (Render) -> Supabase PostgreSQL + pgv
 
 ---
 
-## Current Local Status - 2026-05-22
+## Current Local Status - 2026-05-26
 
-Current branch: `feature/uc13-submission-backend`.
+Current branch: `module3`
 
 ### Completed
 
-- UC-1.3 submission backend is implemented and tested.
-- Required tests are present:
-  - `SubmissionServiceTest`
-  - `SubmissionControllerTest`
-  - `UserServiceTest`
-  - `UserControllerTest`
-- Frontend API wiring now matches backend contracts for submissions, guard rail evaluation, media upload metadata, institutions, and lookups.
-- Reset password page is implemented.
-- Session expiry countdown is wired from JWT `exp`.
-- Dashboard stats use live endpoints where backend support exists, including pending invitation counts.
-- Dashboard invite/manage modal lists pending invitations, supports resend, and shows current users for the selected institution.
+- UC-3.1 publishing pipeline and master calendar backend is fully implemented (19 new files, 3 modified).
+- Flyway V12 migration adds `publication_attempts` and `facebook_page_tokens` tables.
+- `TokenEncryptionService` encrypts Facebook Page Access Token with AES-256-GCM before DB storage.
+- `FacebookPublisherService` integrates with Facebook Graph API v25.0 via Java HttpClient: 2-step photo publish, single-call video publish, 3-attempt retry with 5s/25s/125s backoff.
+- `PublishingSchedulerJob` triggers every minute (GR-T5). Transaction is committed before Graph API calls to respect HikariCP 5-connection limit.
+- `StaleSubmissionDetectorJob` handles missed publish windows every 5 minutes (GR-T9).
+- `TokenHealthCheckJob` validates the page token daily at 08:00 UTC (GR-T4).
+- `CalendarService` + `CalendarController` expose `GET /api/v1/calendar` with role-scoped masking.
+- Admin reschedule via `PATCH /api/v1/submissions/{id}/reschedule` supports guard rail overrides with audit trail.
+- UC-3.4 Resolution Center: `ManualPublishingService` + `ResolutionController` (`/api/v1/resolution`).
+- `AbandonmentDetectorJob` clears manual publish sessions open longer than 2 hours.
+- UC-1.3 submission backend is implemented and tested (on `feature/uc13-submission-backend`, pending merge).
+- Frontend API wiring matches backend contracts for submissions, guard rail evaluation, media upload metadata, institutions, and lookups.
+- Reset password page implemented. Session expiry countdown wired from JWT `exp`.
+- Dashboard stats use live endpoints. Invite/manage modal lists pending invitations and supports resend.
 - App auth state hydrates from `GET /api/v1/me` after login, invite accept, session relogin, and saved-token restore.
-- Invitation create/resend now supersedes older unused, unexpired invite tokens for the same recipient email.
-- User count queries now enforce validator institution scope.
-- `InstitutionController` exposes canonical `/api/v1/institutions` and legacy `/api/v1/admin/institutions`.
-- Flyway migration versions are unique after the UC-1.3 fix: `V3__ensure_institution_email_domain.sql` and `V4__media_assets.sql`.
-- Local datasource configuration supports `DASIG_DATABASE_*` overrides before falling back to standard `DATABASE_*` values and a local JDBC default.
-- Backend Supabase config supports `DASIG_SUPABASE_URL`, `DASIG_SUPABASE_SERVICE_ROLE_KEY`, and `DASIG_SUPABASE_STORAGE_BUCKET`.
-- Flyway fresh Supabase startup is fixed with baseline version `0`, allowing V1 through V4 to run on a new Supabase `public` schema.
-- Local frontend Supabase upload env values are configured through ignored `frontend/.env.local` for the `dasigconnect-media` bucket.
-- Guard rail enforcement is now configurable through `APP_GUARDRAILS_ENFORCED`; local default is `false` to keep save draft / submit-for-review testing unblocked while scheduling rules are tuned.
-- `GuardRailViolationException` now returns a structured `422` payload instead of falling through as a generic internal server error.
-- Submission queue UI has been restyled into a clearer queue panel, and frontend `.jpg` file checks/upload metadata now normalize to `jpeg`.
 
 ### Verification
 
-- Backend: 163 tests passing from the full prior suite.
-- Backend focused submission verification: 42 tests passing across `SlotReservationServiceTest`, `SubmissionServiceTest`, and `SubmissionControllerTest`.
-- Backend focused auth/onboarding tests: 50 tests passing across `InvitationServiceTest`, `InvitationControllerTest`, `UserServiceTest`, and `UserControllerTest`.
+- Backend: **208 tests passing** (0 failures, 0 errors) — all 163 prior tests pass plus UC-3.1 additions.
 - Frontend: `npm.cmd run build` passing.
-- Migration sanity: `mvn clean` and `mvn -DskipTests package` passed after renaming the media migration from V3 to V4.
-- Fresh Supabase DB startup: backend applied V1 through V4 successfully, then a second startup validated migrations with 0 pending migrations.
+- Migration sanity: `mvn clean` and `mvn -DskipTests package` passed.
+- Fresh Supabase DB startup: backend applied V1 through V4 successfully on a clean schema.
 
 ### Known Gaps
 
-- Save draft / submit-for-review remains the active Module 1 blocker until the browser flow is manually verified against the current backend and Supabase environment. The testing bypass and frontend payload defaults are in place, but the issue is not considered closed.
-- Submission queue design has been improved locally, but still needs review with real queue data and responsive/mobile widths.
+- **UC-3.1 frontend**: Calendar page (FullCalendar.js) and Resolution Center page not yet wired. Backend is ready.
+- **Live Facebook publish test**: Requires valid Facebook credentials in environment. App is in Development mode — posts visible only to Meta developer/admin accounts during pilot.
+- **V12 migration on deployed Supabase**: Not yet applied to the remote instance.
+- Save draft / submit-for-review browser flow still needs manual verification (active Module 1 blocker).
+- Submission queue design needs review with real data and mobile widths.
 - Submission lookups do not return categories, tags, or preferred time slots.
 - Media library / asset picker needs UC-2.2 backend: `GET/DELETE /api/v1/media-assets`.
 - Validator review actions need UC-2.1 backend.
 - SSE notifications need UC-2.3 backend.
 - Analytics need UC-2.4 backend.
-- Calendar, auto-publish, manual fallback, AI captions, and recommendations need UC-3.x backend.
-- No built-in validator account exists. Use the administrator dashboard to invite validators, then accept the invitation and set a password.
-- Browser media upload credentials are configured locally, but the full upload flow still needs manual verification through the submission form.
-- Backend deployment runtime still needs team-owned SMTP and Supabase service credentials. Local SMTP and Supabase values are configured through ignored env files.
+- AI captions (UC-3.2) and AI classification/recommendation (UC-3.3) not started.
+- No built-in validator account exists. Use the administrator dashboard to invite validators.
+- Backend deployment runtime still needs team-owned SMTP and Supabase service credentials.
 
 ---
 
@@ -188,8 +181,9 @@ Important enum values are lowercase in the database, including roles and statuse
 | `feat/m4-institution-scheduling`  | Merged                   | Institution management, guard rails, slot reservation, provisioning                                                                                                                 |
 | `dev`                             | In progress              | UC-1.2 extension, conditional bean fix, merged foundation work                                                                                                                      |
 | `feature/uc13-submission-backend` | Done locally, not merged | UC-1.3 backend, required tests, frontend API wiring, reset password/session/dashboard fixes, pending invite/user management UI, invite token superseding, Flyway V4 media migration |
+| `module3`                         | Done locally, not merged | UC-3.1 backend: publishing pipeline, calendar API, Facebook Graph API integration, token encryption, scheduler jobs, resolution center (UC-3.4). 208 tests passing.                |
 | UC-2.x                            | Not started              | Validation, media repository, notifications, analytics                                                                                                                              |
-| UC-3.x                            | Not started              | Calendar, publishing, AI captions/classification/recommendations                                                                                                                    |
+| UC-3.2 / UC-3.3                   | Not started              | AI Caption (Claude Vision), AI Classification & Recommendation (Voyage AI)                                                                                                          |
 
 See `TASKS.md` for the detailed task checklist and current gaps.
 

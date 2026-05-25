@@ -1,5 +1,6 @@
 package com.dasigconnect.backend.repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -78,4 +79,59 @@ public interface SubmissionRepository extends JpaRepository<Submission, UUID> {
         ORDER BY s.scheduledAt ASC NULLS LAST
         """)
     List<Submission> findValidationQueue();
+
+    // ── UC-3.1 Publishing Pipeline ─────────────────────────────────────────────
+
+    /** PublishingSchedulerJob: SCHEDULED submissions whose slot falls inside the current publish window. */
+    @Query("""
+        SELECT s FROM Submission s
+        WHERE s.status = com.dasigconnect.backend.model.entity.SubmissionStatus.scheduled
+        AND s.scheduledAt BETWEEN :from AND :to
+        ORDER BY s.scheduledAt ASC
+        """)
+    List<Submission> findScheduledInPublishWindow(
+            @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    /** StaleSubmissionDetectorJob (GR-T9): SCHEDULED submissions whose slot has already passed. */
+    @Query("""
+        SELECT s FROM Submission s
+        WHERE s.status = com.dasigconnect.backend.model.entity.SubmissionStatus.scheduled
+        AND s.scheduledAt < :cutoff
+        ORDER BY s.scheduledAt ASC
+        """)
+    List<Submission> findMissedScheduledSubmissions(@Param("cutoff") Instant cutoff);
+
+    /** Resolution Center: all PUBLISH_FAILED submissions sorted newest-scheduled first. */
+    @Query("""
+        SELECT s FROM Submission s
+        WHERE s.status = com.dasigconnect.backend.model.entity.SubmissionStatus.publish_failed
+        ORDER BY s.scheduledAt DESC
+        """)
+    List<Submission> findPublishFailures();
+
+    /** Calendar API (admin): all submissions with a scheduled slot, any status. */
+    @Query("""
+        SELECT s FROM Submission s
+        WHERE s.scheduledAt IS NOT NULL
+        ORDER BY s.scheduledAt ASC
+        """)
+    List<Submission> findAllWithScheduledSlot();
+
+    /** Calendar API (contributor/validator): institution-scoped submissions with a slot. */
+    @Query("""
+        SELECT s FROM Submission s
+        WHERE s.scheduledAt IS NOT NULL
+        AND s.institution.id = :institutionId
+        ORDER BY s.scheduledAt ASC
+        """)
+    List<Submission> findWithScheduledSlotByInstitution(@Param("institutionId") UUID institutionId);
+
+    /** AbandonmentDetectorJob: submissions stuck in manual-publish-started state. */
+    @Query("""
+        SELECT s FROM Submission s
+        WHERE s.manualPublishStartedAt IS NOT NULL
+        AND s.manualPublishStartedAt < :cutoff
+        """)
+    List<Submission> findAbandonedManualPublishes(@Param("cutoff") Instant cutoff);
 }
