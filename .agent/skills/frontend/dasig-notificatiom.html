@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notifications — DASIGConnect</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --color-navy-deep:    #0A1628;
+      --color-navy-mid:     #1A3A6B;
+      --color-blue-brand:   #2563EB;
+      --color-blue-fb:      #1877F2;
+      --color-gold:         #F59E0B;
+      --color-gold-light:   #FEF3C7;
+      --color-surface-0:    #FFFFFF;
+      --color-surface-1:    #F3F6FB;
+      --color-surface-2:    #E8EDF5;
+      --color-text-primary: #0A1628;
+      --color-text-secondary:#4B5563;
+      --color-text-muted:   #9CA3AF;
+      --color-text-on-dark: #F0F4FF;
+      --color-success:      #10B981;
+      --color-warning:      #F59E0B;
+      --color-error:        #EF4444;
+      --color-info:         #3B82F6;
+      --color-border:       #D1D9EC;
+      --color-border-focus: #2563EB;
+      --font-display:       'Fraunces', Georgia, serif;
+      --font-body:          'Plus Jakarta Sans', system-ui, sans-serif;
+      --radius-sm:  6px;
+      --radius-md:  10px;
+      --radius-lg:  16px;
+      --radius-xl:  20px;
+      --radius-full: 9999px;
+      --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+      --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+    }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--color-text-primary);
+      background: var(--color-surface-1);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── NAVBAR ─────────────────────────────────────────────────── */
+    .navbar {
+      height: 64px;
+      background: var(--color-surface-0);
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      padding: 0 var(--space-6);
+      gap: var(--space-4);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 4px rgba(10,22,40,0.06);
+    }
+    .navbar-logo {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .logo-mark {
+      width: 34px;
+      height: 34px;
+      background: var(--color-navy-deep);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .logo-mark svg { color: var(--color-gold); }
+    .logo-wordmark {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-weight: 400;
+      font-size: 19px;
+      color: var(--color-navy-deep);
+      letter-spacing: -0.3px;
+    }
+    .logo-wordmark span {
+      font-family: var(--font-body);
+      font-style: normal;
+      font-weight: 700;
+    }
+    .navbar-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 17px;
+      color: var(--color-text-primary);
+    }
+    .navbar-right {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      flex-shrink: 0;
+    }
+    .institution-badge {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      background: var(--color-surface-1);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-full);
+      padding: 5px 12px 5px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+    }
+    .institution-badge i { color: var(--color-navy-mid); }
+
+    /* ── NOTIFICATION BELL ──────────────────────────────────────── */
+    .notif-bell-btn {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius-full);
+      border: none;
+      background: #EBF2FF;
+      color: var(--color-blue-brand);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .notif-bell-btn:hover { background: #DBEAFE; }
+    .notif-bell-btn.active { background: var(--color-blue-brand); color: white; }
+    .notif-badge {
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      min-width: 18px;
+      height: 18px;
+      background: var(--color-error);
+      color: white;
+      border-radius: var(--radius-full);
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+      border: 2px solid white;
+      animation: badge-pop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes badge-pop {
+      from { transform: scale(0); }
+      to   { transform: scale(1); }
+    }
+    .notif-badge.pulse { animation: badge-pop 0.3s, badge-pulse 1.5s 0.3s infinite; }
+    @keyframes badge-pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+      50%      { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+    }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-full);
+      background: var(--color-navy-deep);
+      color: var(--color-gold);
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border: 2px solid var(--color-gold);
+    }
+
+    /* ── APP BODY (sidebar + main) ──────────────────────────────── */
+    .app-body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── SIDEBAR ─────────────────────────────────────────────────── */
+    .sidebar {
+      width: 240px;
+      background: var(--color-surface-0);
+      border-right: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+      padding: var(--space-4) var(--space-3);
+      animation: fade-in-up 0.3s ease both;
+    }
+    .sidebar-role-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-text-muted);
+      padding: var(--space-2) var(--space-4);
+      margin-bottom: var(--space-2);
+    }
+    .nav-section {
+      margin-bottom: var(--space-4);
+    }
+    .nav-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--color-text-muted);
+      padding: 0 var(--space-4);
+      margin-bottom: var(--space-1);
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+      text-decoration: none;
+      position: relative;
+    }
+    .nav-item:hover { background: var(--color-surface-1); color: var(--color-text-primary); }
+    .nav-item.active {
+      background: #EBF2FF;
+      color: var(--color-blue-brand);
+      font-weight: 600;
+      box-shadow: inset 3px 0 0 var(--color-blue-brand);
+    }
+    .nav-item .nav-count {
+      margin-left: auto;
+      background: var(--color-error);
+      color: white;
+      border-radius: var(--radius-full);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+    }
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: var(--space-4);
+      border-top: 1px solid var(--color-border);
+    }
+    .user-card {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-2);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+    }
+    .user-card:hover { background: var(--color-surface-1); }
+    .user-card-info { flex: 1; min-width: 0; }
+    .user-card-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .user-card-role {
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+
+    /* ── MAIN CONTENT ───────────────────────────────────────────── */
+    .main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--space-8) var(--space-8) var(--space-10);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-6);
+    }
+
+    /* ── PAGE HEADER ─────────────────────────────────────────────── */
+    .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      animation: fade-in-up 0.3s ease both;
+    }
+    .page-header-left h1 {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 28px;
+      color: var(--color-navy-deep);
+      line-height: 1.2;
+    }
+    .page-header-left p {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+      margin-top: 4px;
+    }
+    .page-header-actions {
+      display: flex;
+      gap: var(--space-2);
+      align-items: center;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      font: 600 13px var(--font-body);
+      border: none;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--color-blue-brand); color: white; }
+    .btn-primary:hover { background: #1D4ED8; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
+    .btn-ghost {
+      background: transparent;
+      border: 1.5px solid var(--color-border);
+      color: var(--color-text-secondary);
+    }
+    .btn-ghost:hover { background: var(--color-surface-2); color: var(--color-text-primary); }
+
+    /* ── SSE STATUS BAR ─────────────────────────────────────────── */
+    .sse-bar {
+      background: var(--color-surface-0);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--space-3) var(--space-5);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      animation: fade-in-up 0.3s 0.08s ease both;
+    }
+    .sse-left {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+    .sse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: var(--radius-full);
+      background: var(--color-success);
+      box-shadow: 0 0 0 3px rgba(16,185,129,0.2);
+      animation: sse-pulse 2s infinite;
+    }
+    .sse-dot.connecting { background: var(--color-warning); box-shadow: 0 0 0 3px rgba(245,158,11,0.2); }
+    .sse-dot.disconnected { background: var(--color-error); box-shadow: none; animation: none; }
+    @keyframes sse-pulse {
+      0%,100% { box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
+      50%      { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+    }
+    .sse-label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+    }
+    .sse-sublabel {
+      font-size: 11.5px;
+      color: var(--color-text-muted);
+    }
+    .sse-right {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+    }
+    .sse-stat {
+      text-align: right;
+    }
+    .sse-stat-val {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--color-navy-deep);
+    }
+    .sse-stat-lbl {
+      font-size: 10px;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .sse-divider {
+      width: 1px;
+      height: 28px;
+      background: var(--color-border);
+    }
+
+    /* ── LIVE TOAST ─────────────────────────────────────────────── */
+    .live-toast-area {
+      position: fixed;
+      top: 80px;
+      right: 24px;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      pointer-events: none;
+    }
+    .live-toast {
+      background: var(--color-navy-deep);
+      color: var(--color-text-on-dark);
+      border-radius: var(--radius-md);
+      padding: var(--space-3) var(--space-4);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 8px 24px rgba(10,22,40,0.35);
+      min-width: 280px;
+      max-width: 340px;
+      pointer-events: auto;
+      transform: translateX(120%);
+      opacity: 0;
+      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s ease;
+    }
+    .live-toast.show { transform: translateX(0); opacity: 1; }
+    .live-toast.hide { transform: translateX(120%); opacity: 0; transition: transform 0.3s ease, opacity 0.2s ease; }
+    .toast-icon-wrap {
+      width: 30px;
+      height: 30px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .toast-title { font-weight: 600; font-size: 12px; color: var(--color-text-muted); }
+    .toast-body { font-size: 12.5px; color: var(--color-text-on-dark); line-height: 1.4; }
+
+    /* ── NOTIFICATIONS GRID ──────────────────────────────────────── */
+    .notif-layout {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: var(--space-6);
+      align-items: start;
+      animation: fade-in-up 0.35s 0.16s ease both;
+    }
+
+    /* ── NOTIFICATION PANEL (main list) ─────────────────────────── */
+    .notif-panel {
+      background: var(--color-surface-0);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(10,22,40,0.06);
+    }
+    .notif-panel-header {
+      padding: var(--space-5) var(--space-6);
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--color-surface-0);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .notif-panel-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--color-navy-deep);
+    }
+    .notif-panel-meta {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      margin-top: 1px;
+    }
+    .notif-panel-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      border: 1.5px solid var(--color-border);
+      background: transparent;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .icon-btn:hover { background: var(--color-surface-2); color: var(--color-text-primary); }
+
+    /* ── FILTER TABS ─────────────────────────────────────────────── */
+    .filter-tabs {
+      display: flex;
+      gap: 2px;
+      padding: var(--space-3) var(--space-6);
+      border-bottom: 1px solid var(--color-border);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .filter-tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      border: none;
+      background: transparent;
+    }
+    .tab:hover { background: var(--color-surface-1); color: var(--color-text-primary); }
+    .tab.active {
+      background: var(--color-navy-deep);
+      color: white;
+    }
+    .tab .tab-count {
+      background: rgba(255,255,255,0.2);
+      border-radius: var(--radius-full);
+      font-size: 10px;
+      padding: 1px 5px;
+    }
+    .tab:not(.active) .tab-count {
+      background: var(--color-surface-2);
+      color: var(--color-text-muted);
+    }
+
+    /* ── NOTIFICATION LIST ───────────────────────────────────────── */
+    .notif-list {
+      max-height: 680px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-border) transparent;
+    }
+    .notif-list::-webkit-scrollbar { width: 4px; }
+    .notif-list::-webkit-scrollbar-track { background: transparent; }
+    .notif-list::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 2px; }
+
+    .notif-date-group {
+      padding: var(--space-2) var(--space-6) var(--space-1);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--color-text-muted);
+      background: var(--color-surface-1);
+    }
+
+    .notif-item {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+      padding: var(--space-4) var(--space-6);
+      border-bottom: 1px solid var(--color-surface-2);
+      cursor: pointer;
+      transition: background 0.15s;
+      position: relative;
+      text-decoration: none;
+      color: inherit;
+    }
+    .notif-item:hover { background: var(--color-surface-1); }
+    .notif-item:last-child { border-bottom: none; }
+    .notif-item.unread { background: #F0F6FF; }
+    .notif-item.unread:hover { background: #E8F0FE; }
+    .notif-item.critical { background: #FFF5F5; }
+    .notif-item.critical:hover { background: #FEE2E2; }
+    .notif-item.warning-bg { background: #FFFBEB; }
+    .notif-item.warning-bg:hover { background: #FEF3C7; }
+
+    .unread-dot {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 7px;
+      height: 7px;
+      border-radius: var(--radius-full);
+      background: var(--color-blue-brand);
+      flex-shrink: 0;
+    }
+
+    .notif-icon-wrap {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-left: 10px;
+    }
+
+    .notif-body { flex: 1; min-width: 0; }
+    .notif-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      margin-bottom: 3px;
+    }
+    .notif-sender {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .notif-time {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .notif-text {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      line-height: 1.45;
+    }
+    .notif-text strong { color: var(--color-text-primary); font-weight: 600; }
+    .notif-tags {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .notif-tag {
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .notif-deeplink {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--color-blue-brand);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 4px;
+      transition: color 0.15s;
+    }
+    .notif-deeplink:hover { color: #1D4ED8; text-decoration: underline; }
+
+    /* Notification type icon colors */
+    .icon-success { background: #D1FAE5; color: var(--color-success); }
+    .icon-error   { background: #FEE2E2; color: var(--color-error); }
+    .icon-warning { background: #FEF3C7; color: var(--color-warning); }
+    .icon-info    { background: #DBEAFE; color: var(--color-info); }
+    .icon-purple  { background: #EDE9FE; color: #7C3AED; }
+    .icon-navy    { background: var(--color-surface-2); color: var(--color-navy-mid); }
+    .icon-gold    { background: var(--color-gold-light); color: #92400E; }
+
+    /* Status badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-pending   { background: #FEF3C7; color: #92400E; }
+    .badge-approved  { background: #D1FAE5; color: #065F46; }
+    .badge-rejected  { background: #FEE2E2; color: #991B1B; }
+    .badge-scheduled { background: #EDE9FE; color: #5B21B6; }
+    .badge-published { background: var(--color-blue-fb); color: white; }
+    .badge-failed    { background: #FEE2E2; color: #991B1B; }
+    .badge-revision  { background: #DBEAFE; color: #1E40AF; }
+    .badge-critical  { background: var(--color-error); color: white; }
+    .badge-system    { background: var(--color-surface-2); color: var(--color-text-secondary); }
+
+    /* ── RIGHT SIDEBAR ────────────────────────────────────────────── */
+    .right-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+
+    /* ── BELL WIDGET ─────────────────────────────────────────────── */
+    .bell-widget {
+      background: var(--color-surface-0);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(10,22,40,0.06);
+    }
+    .bell-widget-header {
+      padding: var(--space-4) var(--space-5);
+      border-bottom: 1px solid var(--color-border);
+    }
+    .bell-widget-title {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-navy-deep);
+    }
+    .bell-widget-body {
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-4);
+    }
+    .bell-preview {
+      position: relative;
+      display: inline-flex;
+    }
+    .bell-preview-btn {
+      width: 56px;
+      height: 56px;
+      background: var(--color-navy-deep);
+      border-radius: var(--radius-full);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .bell-preview-btn:hover { transform: scale(1.05); }
+    .bell-preview-badge {
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 22px;
+      height: 22px;
+      background: var(--color-error);
+      border-radius: var(--radius-full);
+      border: 3px solid white;
+      font-size: 10px;
+      font-weight: 700;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: badge-pulse 1.5s infinite;
+    }
+    .bell-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: var(--space-2);
+      width: 100%;
+    }
+    .bell-stat {
+      text-align: center;
+      background: var(--color-surface-1);
+      border-radius: var(--radius-sm);
+      padding: var(--space-3) var(--space-2);
+    }
+    .bell-stat-val {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--color-navy-deep);
+    }
+    .bell-stat-val.red { color: var(--color-error); }
+    .bell-stat-val.gold { color: var(--color-gold); }
+    .bell-stat-lbl { font-size: 10px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+    /* ── CHANNEL BREAKDOWN ───────────────────────────────────────── */
+    .channel-card {
+      background: var(--color-surface-0);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(10,22,40,0.06);
+    }
+    .channel-card-header {
+      padding: var(--space-4) var(--space-5);
+      border-bottom: 1px solid var(--color-border);
+    }
+    .channel-card-title {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-navy-deep);
+    }
+    .channel-list {
+      padding: var(--space-4) var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .channel-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+    .channel-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .channel-info { flex: 1; min-width: 0; }
+    .channel-name { font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); }
+    .channel-sub { font-size: 11px; color: var(--color-text-muted); }
+    .channel-bar-wrap {
+      width: 60px;
+    }
+    .channel-bar-bg {
+      height: 4px;
+      background: var(--color-surface-2);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .channel-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.6s ease;
+    }
+
+    /* ── AUDIT LOG ────────────────────────────────────────────────── */
+    .audit-card {
+      background: var(--color-surface-0);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(10,22,40,0.06);
+    }
+    .audit-card-header {
+      padding: var(--space-4) var(--space-5);
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .audit-card-title {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-navy-deep);
+    }
+    .audit-list {
+      padding: var(--space-4) var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .audit-row {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-2);
+    }
+    .audit-type {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .audit-detail { font-size: 11.5px; color: var(--color-text-secondary); line-height: 1.4; }
+    .audit-time { font-size: 10.5px; color: var(--color-text-muted); white-space: nowrap; flex-shrink: 0; }
+
+    /* ── ANIMATIONS ──────────────────────────────────────────────── */
+    @keyframes fade-in-up {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .notif-item.incoming {
+      animation: slide-in-notif 0.45s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+    @keyframes slide-in-notif {
+      from { opacity: 0; transform: translateY(-16px); background: #EBF2FF; }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── EMPTY / LOADING ─────────────────────────────────────────── */
+    .filter-empty {
+      padding: var(--space-10) var(--space-6);
+      text-align: center;
+      display: none;
+    }
+    .filter-empty i { color: var(--color-text-muted); margin-bottom: var(--space-3); }
+    .filter-empty p { font-size: 13px; color: var(--color-text-muted); }
+  </style>
+</head>
+<body>
+
+<!-- ── NAVBAR ─────────────────────────────────────────────────────── -->
+<nav class="navbar">
+  <a href="#" class="navbar-logo">
+    <div class="logo-mark">
+      <i data-lucide="zap" style="width:16px;height:16px;"></i>
+    </div>
+    <span class="logo-wordmark">DASIG<span>Connect</span></span>
+  </a>
+
+  <span class="navbar-title">Notifications</span>
+
+  <div class="navbar-right">
+    <div class="institution-badge">
+      <i data-lucide="building-2" style="width:13px;height:13px;"></i>
+      DASIG Admin
+    </div>
+
+    <!-- NotificationBell + Badge Component -->
+    <button class="notif-bell-btn active" id="navBellBtn" title="Notifications — UC 2.3">
+      <i data-lucide="bell" style="width:17px;height:17px;"></i>
+      <span class="notif-badge pulse" id="navBadge">12</span>
+    </button>
+
+    <div class="user-avatar" title="Maria Santos · Administrator">MS</div>
+  </div>
+</nav>
+
+<!-- ── APP BODY ────────────────────────────────────────────────────── -->
+<div class="app-body">
+
+  <!-- ── SIDEBAR ──────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-role-label">Administrator</div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Overview</div>
+      <a href="#" class="nav-item">
+        <i data-lucide="layout-dashboard" style="width:16px;height:16px;"></i>
+        Dashboard
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Content</div>
+      <a href="#" class="nav-item">
+        <i data-lucide="file-plus" style="width:16px;height:16px;"></i>
+        Submissions
+        <span class="nav-count">7</span>
+      </a>
+      <a href="#" class="nav-item">
+        <i data-lucide="check-circle" style="width:16px;height:16px;"></i>
+        Validation Queue
+      </a>
+      <a href="#" class="nav-item">
+        <i data-lucide="calendar" style="width:16px;height:16px;"></i>
+        Master Calendar
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Publishing</div>
+      <a href="#" class="nav-item">
+        <i data-lucide="send" style="width:16px;height:16px;"></i>
+        Publish Manager
+      </a>
+      <a href="#" class="nav-item">
+        <i data-lucide="alert-triangle" style="width:16px;height:16px;"></i>
+        Resolution Center
+        <span class="nav-count">2</span>
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Platform</div>
+      <a href="#" class="nav-item active">
+        <i data-lucide="bell" style="width:16px;height:16px;"></i>
+        Notifications
+        <span class="nav-count">12</span>
+      </a>
+      <a href="#" class="nav-item">
+        <i data-lucide="users" style="width:16px;height:16px;"></i>
+        User Management
+      </a>
+      <a href="#" class="nav-item">
+        <i data-lucide="building-2" style="width:16px;height:16px;"></i>
+        Institutions
+      </a>
+      <a href="#" class="nav-item">
+        <i data-lucide="settings" style="width:16px;height:16px;"></i>
+        Settings
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" style="width:34px;height:34px;font-size:12px;flex-shrink:0;">MS</div>
+        <div class="user-card-info">
+          <div class="user-card-name">Maria Santos</div>
+          <div class="user-card-role">Administrator · DASIG</div>
+        </div>
+        <i data-lucide="chevron-right" style="width:14px;height:14px;color:var(--color-text-muted);"></i>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN CONTENT ──────────────────────────────────────────────── -->
+  <main class="main-content">
+
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-header-left">
+        <h1>Notifications</h1>
+        <p>UC-2.3 · System and Submission Notifications · Real-time SSE delivery</p>
+      </div>
+      <div class="page-header-actions">
+        <button class="btn btn-ghost" onclick="markAllRead()">
+          <i data-lucide="check-check" style="width:14px;height:14px;"></i>
+          Mark all read
+        </button>
+        <button class="btn btn-ghost">
+          <i data-lucide="settings-2" style="width:14px;height:14px;"></i>
+          Preferences
+        </button>
+      </div>
+    </div>
+
+    <!-- SSENotificationListener Status Bar -->
+    <div class="sse-bar">
+      <div class="sse-left">
+        <div class="sse-dot" id="sseDot"></div>
+        <div>
+          <div class="sse-label">SSENotificationListener · Global</div>
+          <div class="sse-sublabel" id="sseStatus">Connected — /api/notifications/stream · Last event: just now</div>
+        </div>
+      </div>
+      <div class="sse-right">
+        <div class="sse-stat">
+          <div class="sse-stat-val" id="sseEventCount">247</div>
+          <div class="sse-stat-lbl">Events today</div>
+        </div>
+        <div class="sse-divider"></div>
+        <div class="sse-stat">
+          <div class="sse-stat-val" id="sseQueueCount">12</div>
+          <div class="sse-stat-lbl">Unread</div>
+        </div>
+        <div class="sse-divider"></div>
+        <div class="sse-stat">
+          <div class="sse-stat-val" style="color:var(--color-success);">0</div>
+          <div class="sse-stat-lbl">Failures</div>
+        </div>
+        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" id="sseSimBtn" onclick="simulateSSE()">
+          <i data-lucide="radio" style="width:12px;height:12px;"></i>
+          Simulate event
+        </button>
+      </div>
+    </div>
+
+    <!-- Main notification layout -->
+    <div class="notif-layout">
+
+      <!-- ── LEFT: Notification Panel ──────────────────────────────── -->
+      <div class="notif-panel">
+        <div class="notif-panel-header">
+          <div>
+            <div class="notif-panel-title">All Notifications</div>
+            <div class="notif-panel-meta" id="panelMeta">50 notifications · 12 unread</div>
+          </div>
+          <div class="notif-panel-actions">
+            <button class="icon-btn" title="Filter">
+              <i data-lucide="sliders-horizontal" style="width:14px;height:14px;"></i>
+            </button>
+            <button class="icon-btn" title="Sort">
+              <i data-lucide="arrow-up-down" style="width:14px;height:14px;"></i>
+            </button>
+            <button class="icon-btn" title="Refresh" onclick="refreshPanel()">
+              <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter tabs -->
+        <div class="filter-tabs">
+          <button class="tab active" data-filter="all" onclick="filterNotifs(this,'all')">
+            All <span class="tab-count">50</span>
+          </button>
+          <button class="tab" data-filter="unread" onclick="filterNotifs(this,'unread')">
+            Unread <span class="tab-count">12</span>
+          </button>
+          <button class="tab" data-filter="submissions" onclick="filterNotifs(this,'submissions')">
+            Submissions <span class="tab-count">18</span>
+          </button>
+          <button class="tab" data-filter="publishing" onclick="filterNotifs(this,'publishing')">
+            Publishing <span class="tab-count">11</span>
+          </button>
+          <button class="tab" data-filter="system" onclick="filterNotifs(this,'system')">
+            System <span class="tab-count">10</span>
+          </button>
+          <button class="tab" data-filter="overrides" onclick="filterNotifs(this,'overrides')">
+            Overrides <span class="tab-count">5</span>
+          </button>
+          <button class="tab" data-filter="deadline" onclick="filterNotifs(this,'deadline')">
+            Deadlines <span class="tab-count">6</span>
+          </button>
+        </div>
+
+        <!-- Notification list -->
+        <div class="notif-list" id="notifList">
+          <!-- Injected by JS -->
+        </div>
+      </div>
+
+      <!-- ── RIGHT: Bell Widget + Channel Breakdown + Audit ──────────── -->
+      <div class="right-sidebar">
+
+        <!-- NotificationBell Widget Component -->
+        <div class="bell-widget">
+          <div class="bell-widget-header">
+            <div class="bell-widget-title">NotificationBell</div>
+            <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">Component · UC-2.3</div>
+          </div>
+          <div class="bell-widget-body">
+            <div class="bell-preview">
+              <div class="bell-preview-btn" id="bellPreviewBtn" onclick="toggleBellActive()">
+                <i data-lucide="bell" style="width:24px;height:24px;"></i>
+              </div>
+              <div class="bell-preview-badge" id="bellPreviewBadge">12</div>
+            </div>
+            <div class="bell-stats">
+              <div class="bell-stat">
+                <div class="bell-stat-val red" id="bellUnread">12</div>
+                <div class="bell-stat-lbl">Unread</div>
+              </div>
+              <div class="bell-stat">
+                <div class="bell-stat-val gold">3</div>
+                <div class="bell-stat-lbl">Critical</div>
+              </div>
+              <div class="bell-stat">
+                <div class="bell-stat-val">50</div>
+                <div class="bell-stat-lbl">Total</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Channel Breakdown -->
+        <div class="channel-card">
+          <div class="channel-card-header">
+            <div class="channel-card-title">Delivery Channels</div>
+            <div style="font-size:11px;color:var(--color-text-muted);">Last 24 hours</div>
+          </div>
+          <div class="channel-list">
+            <div class="channel-row">
+              <div class="channel-icon icon-info">
+                <i data-lucide="monitor" style="width:15px;height:15px;"></i>
+              </div>
+              <div class="channel-info">
+                <div class="channel-name">In-App</div>
+                <div class="channel-sub">50 delivered · 0 failed</div>
+              </div>
+              <div class="channel-bar-wrap">
+                <div class="channel-bar-bg">
+                  <div class="channel-bar-fill" style="width:100%;background:var(--color-blue-brand);"></div>
+                </div>
+                <div style="font-size:10px;color:var(--color-text-muted);text-align:right;margin-top:2px;">100%</div>
+              </div>
+            </div>
+            <div class="channel-row">
+              <div class="channel-icon icon-success">
+                <i data-lucide="mail" style="width:15px;height:15px;"></i>
+              </div>
+              <div class="channel-info">
+                <div class="channel-name">Email</div>
+                <div class="channel-sub">24 delivered · 1 retrying</div>
+              </div>
+              <div class="channel-bar-wrap">
+                <div class="channel-bar-bg">
+                  <div class="channel-bar-fill" style="width:92%;background:var(--color-success);"></div>
+                </div>
+                <div style="font-size:10px;color:var(--color-text-muted);text-align:right;margin-top:2px;">92%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alternative Flow statuses -->
+        <div class="channel-card">
+          <div class="channel-card-header">
+            <div class="channel-card-title">Alternative Flows</div>
+            <div style="font-size:11px;color:var(--color-text-muted);">A1–A4 monitoring</div>
+          </div>
+          <div class="channel-list">
+            <div class="channel-row">
+              <div class="channel-icon" style="background:#FEF3C7;color:#92400E;">
+                <i data-lucide="mail-x" style="width:14px;height:14px;"></i>
+              </div>
+              <div class="channel-info">
+                <div class="channel-name" style="font-size:11.5px;">A1 · Email Retry</div>
+                <div class="channel-sub">1 pending · 0/3 retries</div>
+              </div>
+              <span class="badge badge-pending">Active</span>
+            </div>
+            <div class="channel-row">
+              <div class="channel-icon icon-navy">
+                <i data-lucide="wifi-off" style="width:14px;height:14px;"></i>
+              </div>
+              <div class="channel-info">
+                <div class="channel-name" style="font-size:11.5px;">A2 · Offline Queue</div>
+                <div class="channel-sub">0 queued server-side</div>
+              </div>
+              <span class="badge" style="background:#D1FAE5;color:#065F46;">Clear</span>
+            </div>
+            <div class="channel-row">
+              <div class="channel-icon icon-navy">
+                <i data-lucide="layers" style="width:14px;height:14px;"></i>
+              </div>
+              <div class="channel-info">
+                <div class="channel-name" style="font-size:11.5px;">A3 · Batch (5s)</div>
+                <div class="channel-sub">No concurrent events</div>
+              </div>
+              <span class="badge" style="background:#D1FAE5;color:#065F46;">Idle</span>
+            </div>
+            <div class="channel-row">
+              <div class="channel-icon icon-error">
+                <i data-lucide="flame" style="width:14px;height:14px;"></i>
+              </div>
+              <div class="channel-info">
+                <div class="channel-name" style="font-size:11.5px;">A4 · Fail Consolidation</div>
+                <div class="channel-sub">0 failures (1h window)</div>
+              </div>
+              <span class="badge" style="background:#D1FAE5;color:#065F46;">Clear</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Audit log -->
+        <div class="audit-card">
+          <div class="audit-card-header">
+            <div class="audit-card-title">Audit Log</div>
+            <a href="#" style="font-size:11px;color:var(--color-blue-brand);font-weight:600;text-decoration:none;">View all</a>
+          </div>
+          <div class="audit-list" id="auditList">
+            <!-- injected by JS -->
+          </div>
+        </div>
+
+      </div><!-- /right-sidebar -->
+    </div><!-- /notif-layout -->
+
+  </main>
+</div>
+
+<!-- ── LIVE TOAST AREA ─────────────────────────────────────────────── -->
+<div class="live-toast-area" id="toastArea"></div>
+
+<script>
+lucide.createIcons();
+
+// ── DATA ─────────────────────────────────────────────────────────────
+const institutions = [
+  'CIT-U', 'Silliman University', 'VSU', 'USC', 'NORSU'
+];
+
+const NOTIFS = [
+  // Critical / System
+  { id:'n1',  trigger:'T13', cat:'system',    unread:true,  critical:true,
+    icon:'shield-alert', iconCls:'icon-error',
+    sender:'System · Token Health Check', time:'2 min ago',
+    text:'<strong>CRITICAL:</strong> Facebook Page Access Token failed daily validation. Automated publishing is <strong>suspended</strong>. Re-authentication required immediately.',
+    tags:[{l:'T13',cls:'badge-critical'},{l:'System',cls:'badge-system'}],
+    link:'#/settings/token', linkLabel:'Go to Token Settings', group:'Today' },
+  { id:'n2',  trigger:'T8',  cat:'deadline',  unread:true,  warning:true,
+    icon:'clock', iconCls:'icon-warning',
+    sender:'Deadline Watch · CIT-U', time:'8 min ago',
+    text:'<strong>URGENT:</strong> Submission <em>"DOST Region 7 Innovation Summit"</em> is scheduled to publish in <strong>28 minutes</strong> and has not yet been validated.',
+    tags:[{l:'T8',cls:'badge-pending'},{l:'Deadline',cls:'badge-system'}],
+    link:'#/validation/q/sub-4892', linkLabel:'Open in Validation Queue', group:'Today' },
+  { id:'n3',  trigger:'T14', cat:'system',    unread:true,  critical:true,
+    icon:'building-2', iconCls:'icon-error',
+    sender:'System · Institution Monitor', time:'14 min ago',
+    text:'<strong>Silliman University</strong> has no active Validators. Pending submissions are being <strong>escalated</strong> to the Administrator for action.',
+    tags:[{l:'T14',cls:'badge-critical'},{l:'Institution',cls:'badge-system'}],
+    link:'#/institutions/silliman', linkLabel:'Manage Institution', group:'Today' },
+  { id:'n4',  trigger:'T12', cat:'system',    unread:true,  warning:true,
+    icon:'key', iconCls:'icon-warning',
+    sender:'System · Token Guard (GR-T3)', time:'1 hr ago',
+    text:'Facebook Page Access Token will <strong>expire in 6 days</strong>. Renew before expiry to prevent publishing disruption.',
+    tags:[{l:'T12',cls:'badge-pending'},{l:'Token',cls:'badge-system'}],
+    link:'#/settings/token', linkLabel:'Renew Token', group:'Today' },
+  { id:'n5',  trigger:'T7',  cat:'publishing',unread:true,  critical:true,
+    icon:'x-circle', iconCls:'icon-error',
+    sender:'Publishing Engine', time:'1 hr 22 min ago',
+    text:'<strong>Automated publish failed</strong> for submission <em>"DASIG Annual Research Colloquium"</em> (CIT-U). Error: <code>OAuthException #190</code>. Manual action required.',
+    tags:[{l:'T7',cls:'badge-failed'},{l:'Publishing',cls:'badge-system'}],
+    link:'#/resolution-center/pub-7731', linkLabel:'Go to Resolution Center', group:'Today' },
+  { id:'n6',  trigger:'T8',  cat:'deadline',  unread:true,  warning:true,
+    icon:'clock', iconCls:'icon-warning',
+    sender:'Deadline Watch · VSU', time:'2 hr ago',
+    text:'Submission <em>"Sustainable Campus Initiatives"</em> (VSU) is scheduled to publish in <strong>25 minutes</strong> — still awaiting validator sign-off.',
+    tags:[{l:'T8',cls:'badge-pending'},{l:'Deadline',cls:'badge-system'}],
+    link:'#/validation/q/sub-4771', linkLabel:'Review Submission', group:'Today' },
+  { id:'n7',  trigger:'T15', cat:'system',    unread:false,
+    icon:'sparkles', iconCls:'icon-success',
+    sender:'Onboarding System', time:'3 hr ago',
+    text:'<strong>NORSU</strong> has been successfully onboarded. The Validator account is active and the workspace is ready for submissions.',
+    tags:[{l:'T15',cls:'badge-approved'},{l:'Onboarding',cls:'badge-system'}],
+    link:'#/institutions/norsu', linkLabel:'View Institution', group:'Today' },
+  { id:'n8',  trigger:'T6',  cat:'publishing',unread:false,
+    icon:'send', iconCls:'icon-success',
+    sender:'Admin · Maria Santos', time:'4 hr ago',
+    text:'Post <em>"USC Science Fair 2025"</em> manually published to the DASIG Facebook page by Administrator <strong>Maria Santos</strong>. <a href="#" class="notif-deeplink">View post ↗</a>',
+    tags:[{l:'T6',cls:'badge-published'},{l:'Manual Post',cls:'badge-system'}],
+    link:'#/submissions/sub-4702', linkLabel:'View Submission Record', group:'Today' },
+  { id:'n9',  trigger:'T11', cat:'publishing',unread:false,
+    icon:'megaphone', iconCls:'icon-navy',
+    sender:'Admin Direct Post', time:'5 hr ago',
+    text:'Administrator posted directly on behalf of <strong>CIT-U</strong>: <em>"CIT-U Robotics Team wins national championship"</em>. Post is now live.',
+    tags:[{l:'T11',cls:'badge-published'},{l:'Direct Post',cls:'badge-system'}],
+    link:'#/submissions/sub-4699', linkLabel:'View Post Record', group:'Today' },
+  { id:'n10', trigger:'T16', cat:'submissions',unread:false,
+    icon:'calendar', iconCls:'icon-info',
+    sender:'Admin · Rescheduled Post', time:'6 hr ago',
+    text:'Your submission <em>"DASIG Media Lab Grand Opening"</em> has been <strong>rescheduled</strong>. Original: May 27, 9:00 AM → New: May 28, 2:00 PM.',
+    tags:[{l:'T16',cls:'badge-revision'},{l:'Rescheduled',cls:'badge-system'}],
+    link:'#/submissions/sub-4688', linkLabel:'View Calendar Entry', group:'Today' },
+  // T2, T3, T4 — submission outcomes
+  { id:'n11', trigger:'T2',  cat:'submissions',unread:false,
+    icon:'check-circle', iconCls:'icon-success',
+    sender:'Validation · CIT-U', time:'7 hr ago',
+    text:'Your submission <em>"CIT-U Engineering Week 2025"</em> has been <strong>approved</strong> and scheduled for publication on <strong>May 27, 10:00 AM</strong>.',
+    tags:[{l:'T2',cls:'badge-approved'},{l:'Approved',cls:'badge-system'}],
+    link:'#/calendar/slot-20250527', linkLabel:'View in Master Calendar', group:'Today' },
+  { id:'n12', trigger:'T3',  cat:'submissions',unread:false,
+    icon:'edit-3', iconCls:'icon-info',
+    sender:'Validation · VSU', time:'8 hr ago',
+    text:'Validator <strong>Dr. Eduardo Reyes</strong> has requested revisions on <em>"VSU Agri-Tech Forum"</em>. Reason: caption needs updated speaker names.',
+    tags:[{l:'T3',cls:'badge-revision'},{l:'Revision',cls:'badge-system'}],
+    link:'#/submissions/sub-4671/revise', linkLabel:'Open Submission to Revise', group:'Today' },
+  { id:'n13', trigger:'T4',  cat:'submissions',unread:false,
+    icon:'x-circle', iconCls:'icon-error',
+    sender:'Validation · USC', time:'9 hr ago',
+    text:'Submission <em>"USC Alumni Homecoming"</em> was <strong>rejected</strong>. Code: <strong>R-03 — Duplicate content</strong>. Written note attached.',
+    tags:[{l:'T4',cls:'badge-rejected'},{l:'Rejected',cls:'badge-system'}],
+    link:'#/submissions/sub-4660', linkLabel:'View Rejection Details', group:'Today' },
+  { id:'n14', trigger:'T1',  cat:'submissions',unread:false,
+    icon:'file-plus', iconCls:'icon-navy',
+    sender:'Submission · CIT-U', time:'10 hr ago',
+    text:'<strong>Ana Reyes</strong> (CIT-U) submitted <em>"Innovation Week Kickoff"</em> pending validation. Scheduled publication: May 28, 8:00 AM.',
+    tags:[{l:'T1',cls:'badge-pending'},{l:'New Submission',cls:'badge-system'}],
+    link:'#/validation/q/sub-4655', linkLabel:'Go to Validation Queue', group:'Today' },
+  // Overrides T9, T10, T17
+  { id:'n15', trigger:'T9',  cat:'overrides', unread:false,
+    icon:'shield', iconCls:'icon-purple',
+    sender:'Override Decision · Admin', time:'11 hr ago',
+    text:'Your slot override request for <em>"CIT-U Research Forum"</em> has been <strong>approved</strong> by Administrator Santos. You may proceed with the selected slot.',
+    tags:[{l:'T9',cls:'badge-approved'},{l:'Override',cls:'badge-system'}],
+    link:'#/submissions/sub-4640/slot', linkLabel:'Confirm Slot', group:'Today' },
+  { id:'n16', trigger:'T10', cat:'overrides', unread:false,
+    icon:'shield-off', iconCls:'icon-error',
+    sender:'Override Decision · Admin', time:'Yesterday',
+    text:'Your slot override request for <em>"Silliman Science Week"</em> was <strong>denied</strong>. Reason: "Slot already reserved for another institution\'s post."',
+    tags:[{l:'T10',cls:'badge-rejected'},{l:'Override',cls:'badge-system'}],
+    link:'#/submissions/sub-4621/slot', linkLabel:'Request New Override', group:'Yesterday' },
+  { id:'n17', trigger:'T17', cat:'overrides', unread:false,
+    icon:'calendar-check', iconCls:'icon-purple',
+    sender:'Override Suggestion · Admin', time:'Yesterday',
+    text:'Administrator Santos suggests <strong>May 29, 3:00 PM</strong> as an alternative slot for your submission <em>"VSU Tech Expo"</em>. Accept, choose another, or submit new override.',
+    tags:[{l:'T17',cls:'badge-revision'},{l:'Alt. Slot',cls:'badge-system'}],
+    link:'#/submissions/sub-4618/slot', linkLabel:'Review Slot Options', group:'Yesterday' },
+  // More T1 items (validators notified of new submissions)
+  { id:'n18', trigger:'T1',  cat:'submissions',unread:false,
+    icon:'file-plus', iconCls:'icon-navy',
+    sender:'Submission · Silliman University', time:'Yesterday',
+    text:'<strong>Lourdes Bautista</strong> (Silliman) submitted <em>"Silliman Green Campus Drive"</em> for validation. Scheduled: May 30, 7:00 AM.',
+    tags:[{l:'T1',cls:'badge-pending'}],
+    link:'#/validation/q/sub-4610', linkLabel:'Open Validation Queue', group:'Yesterday' },
+  { id:'n19', trigger:'T5',  cat:'publishing',unread:false,
+    icon:'check-circle-2', iconCls:'icon-success',
+    sender:'Publishing Engine', time:'Yesterday',
+    text:'<em>"DASIG Quarterly Newsletter Q1 2025"</em> was <strong>published successfully</strong> to the DASIG Facebook page at 9:00 AM.',
+    tags:[{l:'T5',cls:'badge-published'}],
+    link:'#/posts/fb-5591', linkLabel:'View Live Post', group:'Yesterday' },
+  { id:'n20', trigger:'T2',  cat:'submissions',unread:false,
+    icon:'check-circle', iconCls:'icon-success',
+    sender:'Validation · CIT-U', time:'Yesterday',
+    text:'Submission <em>"CIT-U Founding Anniversary Celebration"</em> approved and scheduled for <strong>May 26, 6:00 PM</strong>.',
+    tags:[{l:'T2',cls:'badge-approved'}],
+    link:'#/calendar/slot-20250526', linkLabel:'View in Calendar', group:'Yesterday' },
+  { id:'n21', trigger:'T8',  cat:'deadline',  unread:false,
+    icon:'clock', iconCls:'icon-warning',
+    sender:'Deadline Watch · USC', time:'Yesterday',
+    text:'<em>"USC STEM Olympiad"</em> approaching validation deadline — 27 minutes to publication. Validators notified via email.',
+    tags:[{l:'T8',cls:'badge-pending'}],
+    link:'#/validation/q/sub-4598', linkLabel:'View Submission', group:'Yesterday' },
+  { id:'n22', trigger:'T3',  cat:'submissions',unread:false,
+    icon:'edit-3', iconCls:'icon-info',
+    sender:'Validation · CIT-U', time:'Yesterday',
+    text:'Revision requested on <em>"CIT-U Hackathon 2025"</em> — please update the event caption to reflect final speaker lineup.',
+    tags:[{l:'T3',cls:'badge-revision'}],
+    link:'#/submissions/sub-4590/revise', linkLabel:'Revise Submission', group:'Yesterday' },
+  { id:'n23', trigger:'T7',  cat:'publishing',unread:false,
+    icon:'x-circle', iconCls:'icon-error',
+    sender:'Publishing Engine', time:'Yesterday',
+    text:'Automated publish failed for <em>"VSU Cultural Night"</em>. Error: <code>Invalid access token</code>. Post moved to Resolution Center.',
+    tags:[{l:'T7',cls:'badge-failed'}],
+    link:'#/resolution-center', linkLabel:'View in Resolution Center', group:'Yesterday' },
+  { id:'n24', trigger:'T6',  cat:'publishing',unread:false,
+    icon:'send', iconCls:'icon-success',
+    sender:'Admin · Manual Publish', time:'Yesterday',
+    text:'<em>"VSU Cultural Night"</em> manually published by Administrator after token renewal. Post is now live on DASIG Facebook page.',
+    tags:[{l:'T6',cls:'badge-published'}],
+    link:'#/posts/fb-5580', linkLabel:'View Live Post', group:'Yesterday' },
+  { id:'n25', trigger:'T12', cat:'system',    unread:false,
+    icon:'key', iconCls:'icon-warning',
+    sender:'System · Token Guard (GR-T3)', time:'Yesterday',
+    text:'Facebook Page Access Token expiry warning sent 7 days before expiry. This is the first notice.',
+    tags:[{l:'T12',cls:'badge-pending'},{l:'Token',cls:'badge-system'}],
+    link:'#/settings/token', linkLabel:'Renew Token', group:'Yesterday' },
+  { id:'n26', trigger:'T1',  cat:'submissions',unread:false,
+    icon:'file-plus', iconCls:'icon-navy',
+    sender:'Submission · VSU', time:'2 days ago',
+    text:'<strong>Jose Macaraig</strong> (VSU) submitted <em>"VSU Research Week 2025"</em> for validation. Scheduled: June 1, 8:00 AM.',
+    tags:[{l:'T1',cls:'badge-pending'}],
+    link:'#/validation/q/sub-4578', linkLabel:'Open Validation Queue', group:'2 Days Ago' },
+  { id:'n27', trigger:'T4',  cat:'submissions',unread:false,
+    icon:'x-circle', iconCls:'icon-error',
+    sender:'Validation · VSU', time:'2 days ago',
+    text:'Submission <em>"VSU Open House 2025"</em> rejected. Code: <strong>R-01 — Incomplete media assets</strong>. All 3 required photos must be submitted.',
+    tags:[{l:'T4',cls:'badge-rejected'}],
+    link:'#/submissions/sub-4565', linkLabel:'View Rejection Details', group:'2 Days Ago' },
+  { id:'n28', trigger:'T9',  cat:'overrides', unread:false,
+    icon:'shield', iconCls:'icon-purple',
+    sender:'Override Decision · Admin', time:'2 days ago',
+    text:'Slot override approved for <em>"USC Innovation Pitch Deck"</em>. New slot: May 31, 4:30 PM confirmed by Administrator.',
+    tags:[{l:'T9',cls:'badge-approved'},{l:'Override'}],
+    link:'#/submissions/sub-4560/slot', linkLabel:'View Confirmed Slot', group:'2 Days Ago' },
+  { id:'n29', trigger:'T11', cat:'publishing',unread:false,
+    icon:'megaphone', iconCls:'icon-navy',
+    sender:'Admin Direct Post', time:'2 days ago',
+    text:'Administrator posted directly on behalf of <strong>Silliman University</strong>: <em>"Silliman Research Week Launch"</em>.',
+    tags:[{l:'T11',cls:'badge-published'}],
+    link:'#/posts/fb-5572', linkLabel:'View Post', group:'2 Days Ago' },
+  { id:'n30', trigger:'T5',  cat:'publishing',unread:false,
+    icon:'check-circle-2', iconCls:'icon-success',
+    sender:'Publishing Engine', time:'2 days ago',
+    text:'<em>"CIT-U College Cup 2025"</em> published successfully to DASIG Facebook page at 11:00 AM.',
+    tags:[{l:'T5',cls:'badge-published'}],
+    link:'#/posts/fb-5565', linkLabel:'View Live Post', group:'2 Days Ago' },
+  { id:'n31', trigger:'T16', cat:'submissions',unread:false,
+    icon:'calendar', iconCls:'icon-info',
+    sender:'Admin · Rescheduled Post', time:'3 days ago',
+    text:'<em>"NORSU Founding Anniversary"</em> rescheduled. Original: June 2, 10:00 AM → New: June 3, 9:00 AM by Administrator Santos.',
+    tags:[{l:'T16',cls:'badge-revision'}],
+    link:'#/submissions/sub-4548', linkLabel:'View Updated Schedule', group:'3 Days Ago' },
+  { id:'n32', trigger:'T15', cat:'system',    unread:false,
+    icon:'sparkles', iconCls:'icon-success',
+    sender:'Onboarding System', time:'3 days ago',
+    text:'<strong>USC (University of San Carlos)</strong> workspace activated. Validator accounts provisioned and ready.',
+    tags:[{l:'T15',cls:'badge-approved'}],
+    link:'#/institutions/usc', linkLabel:'View Institution', group:'3 Days Ago' },
+  { id:'n33', trigger:'T1',  cat:'submissions',unread:false,
+    icon:'file-plus', iconCls:'icon-navy',
+    sender:'Submission · USC', time:'3 days ago',
+    text:'<strong>Carmen Villar</strong> (USC) submitted <em>"USC Science Olympiad Finals"</em>. Scheduled publication: June 4, 7:30 AM.',
+    tags:[{l:'T1',cls:'badge-pending'}],
+    link:'#/validation/q/sub-4540', linkLabel:'Open Validation Queue', group:'3 Days Ago' },
+  { id:'n34', trigger:'T2',  cat:'submissions',unread:false,
+    icon:'check-circle', iconCls:'icon-success',
+    sender:'Validation · USC', time:'3 days ago',
+    text:'<em>"USC College of Engineering Week"</em> approved and scheduled for publication June 5, 8:00 AM.',
+    tags:[{l:'T2',cls:'badge-approved'}],
+    link:'#/calendar/slot-20250605', linkLabel:'View in Calendar', group:'3 Days Ago' },
+  { id:'n35', trigger:'T8',  cat:'deadline',  unread:false,
+    icon:'clock', iconCls:'icon-warning',
+    sender:'Deadline Watch · Silliman University', time:'3 days ago',
+    text:'Submission <em>"Silliman Environment Week"</em> approaching deadline — 22 minutes to scheduled publication.',
+    tags:[{l:'T8',cls:'badge-pending'}],
+    link:'#/validation/q/sub-4532', linkLabel:'Review Urgently', group:'3 Days Ago' },
+  { id:'n36', trigger:'T3',  cat:'submissions',unread:false,
+    icon:'edit-3', iconCls:'icon-info',
+    sender:'Validation · Silliman University', time:'4 days ago',
+    text:'Revision requested on <em>"Silliman Science and Technology Week"</em>. Please update event date in caption — currently shows incorrect month.',
+    tags:[{l:'T3',cls:'badge-revision'}],
+    link:'#/submissions/sub-4521/revise', linkLabel:'Revise Submission', group:'4 Days Ago' },
+  { id:'n37', trigger:'T5',  cat:'publishing',unread:false,
+    icon:'check-circle-2', iconCls:'icon-success',
+    sender:'Publishing Engine', time:'4 days ago',
+    text:'<em>"Silliman Science and Technology Week"</em> published successfully at 8:00 AM after revision and re-approval.',
+    tags:[{l:'T5',cls:'badge-published'}],
+    link:'#/posts/fb-5554', linkLabel:'View Live Post', group:'4 Days Ago' },
+  { id:'n38', trigger:'T10', cat:'overrides', unread:false,
+    icon:'shield-off', iconCls:'icon-error',
+    sender:'Override Decision · Admin', time:'4 days ago',
+    text:'Override request for <em>"NORSU Founding Day"</em> denied. Reason: Requested slot exceeds institution posting frequency limit.',
+    tags:[{l:'T10',cls:'badge-rejected'}],
+    link:'#/submissions/sub-4515/slot', linkLabel:'Submit New Request', group:'4 Days Ago' },
+  { id:'n39', trigger:'T7',  cat:'publishing',unread:false,
+    icon:'x-circle', iconCls:'icon-error',
+    sender:'Publishing Engine', time:'4 days ago',
+    text:'Publishing failed for <em>"CIT-U Sports Festival 2025"</em>. Error: API rate limit exceeded. Retry scheduled in 30 minutes.',
+    tags:[{l:'T7',cls:'badge-failed'}],
+    link:'#/resolution-center/pub-7718', linkLabel:'Go to Resolution Center', group:'4 Days Ago' },
+  { id:'n40', trigger:'T14', cat:'system',    unread:false,
+    icon:'building-2', iconCls:'icon-error',
+    sender:'System · Institution Monitor', time:'4 days ago',
+    text:'<strong>VSU</strong> temporarily had no active Validators. The last active Validator account was deactivated. Submissions escalated.',
+    tags:[{l:'T14',cls:'badge-critical'}],
+    link:'#/institutions/vsu', linkLabel:'Manage Validators', group:'4 Days Ago' },
+  { id:'n41', trigger:'T1',  cat:'submissions',unread:false,
+    icon:'file-plus', iconCls:'icon-navy',
+    sender:'Submission · CIT-U', time:'5 days ago',
+    text:'<strong>Rina Cruz</strong> (CIT-U) submitted <em>"CIT-U Alumni Homecoming 2025"</em> for validation. Scheduled: June 6, 9:00 AM.',
+    tags:[{l:'T1',cls:'badge-pending'}],
+    link:'#/validation/q/sub-4498', linkLabel:'Open Validation Queue', group:'5 Days Ago' },
+  { id:'n42', trigger:'T17', cat:'overrides', unread:false,
+    icon:'calendar-check', iconCls:'icon-purple',
+    sender:'Override Suggestion · Admin', time:'5 days ago',
+    text:'Alternative slot suggested for <em>"CIT-U Sports Festival 2025"</em>: June 7, 1:00 PM. Accept, choose another slot, or submit a new override.',
+    tags:[{l:'T17',cls:'badge-revision'}],
+    link:'#/submissions/sub-4492/slot', linkLabel:'Review Slot Options', group:'5 Days Ago' },
+  { id:'n43', trigger:'T4',  cat:'submissions',unread:false,
+    icon:'x-circle', iconCls:'icon-error',
+    sender:'Validation · CIT-U', time:'5 days ago',
+    text:'<em>"CIT-U IT Society Fiesta"</em> rejected. Code: <strong>R-02 — Inappropriate content</strong>. Detailed notes attached.',
+    tags:[{l:'T4',cls:'badge-rejected'}],
+    link:'#/submissions/sub-4487', linkLabel:'View Rejection Details', group:'5 Days Ago' },
+  { id:'n44', trigger:'T6',  cat:'publishing',unread:false,
+    icon:'send', iconCls:'icon-success',
+    sender:'Admin · Manual Publish', time:'5 days ago',
+    text:'<em>"VSU Engineering Week"</em> manually published by Administrator. Validators at VSU have been notified.',
+    tags:[{l:'T6',cls:'badge-published'}],
+    link:'#/posts/fb-5541', linkLabel:'View Live Post', group:'5 Days Ago' },
+  { id:'n45', trigger:'T2',  cat:'submissions',unread:false,
+    icon:'check-circle', iconCls:'icon-success',
+    sender:'Validation · VSU', time:'6 days ago',
+    text:'<em>"VSU Engineering Week"</em> approved and scheduled for June 8, 8:00 AM.',
+    tags:[{l:'T2',cls:'badge-approved'}],
+    link:'#/calendar/slot-20250608', linkLabel:'View in Calendar', group:'6 Days Ago' },
+  { id:'n46', trigger:'T11', cat:'publishing',unread:false,
+    icon:'megaphone', iconCls:'icon-navy',
+    sender:'Admin Direct Post', time:'6 days ago',
+    text:'Administrator posted directly on behalf of <strong>NORSU</strong>: <em>"NORSU Coastal Cleanup Drive"</em> — now live.',
+    tags:[{l:'T11',cls:'badge-published'}],
+    link:'#/posts/fb-5535', linkLabel:'View Post', group:'6 Days Ago' },
+  { id:'n47', trigger:'T9',  cat:'overrides', unread:false,
+    icon:'shield', iconCls:'icon-purple',
+    sender:'Override Decision · Admin', time:'6 days ago',
+    text:'Slot override approved for <em>"Silliman STEM Week"</em>. Validator at Silliman University has been notified.',
+    tags:[{l:'T9',cls:'badge-approved'}],
+    link:'#/submissions/sub-4472/slot', linkLabel:'View Confirmed Slot', group:'6 Days Ago' },
+  { id:'n48', trigger:'T5',  cat:'publishing',unread:false,
+    icon:'check-circle-2', iconCls:'icon-success',
+    sender:'Publishing Engine', time:'Last week',
+    text:'<em>"USC Environment Forum"</em> published successfully to DASIG Facebook page.',
+    tags:[{l:'T5',cls:'badge-published'}],
+    link:'#/posts/fb-5528', linkLabel:'View Live Post', group:'Last Week' },
+  { id:'n49', trigger:'T13', cat:'system',    unread:false,
+    icon:'shield-alert', iconCls:'icon-error',
+    sender:'System · Token Health Check', time:'Last week',
+    text:'Previous token validation failure (now resolved). Automated publishing was suspended for 4 hours. All queued posts dispatched after re-auth.',
+    tags:[{l:'T13',cls:'badge-system'},{l:'Resolved',cls:'badge-approved'}],
+    link:'#/audit-log', linkLabel:'View Audit Entry', group:'Last Week' },
+  { id:'n50', trigger:'T15', cat:'system',    unread:false,
+    icon:'sparkles', iconCls:'icon-success',
+    sender:'Onboarding System', time:'Last week',
+    text:'<strong>VSU (Visayas State University)</strong> workspace re-activated after Validator reassignment. Pending submissions can now proceed to validation.',
+    tags:[{l:'T15',cls:'badge-approved'},{l:'Onboarding'}],
+    link:'#/institutions/vsu', linkLabel:'View Institution', group:'Last Week' },
+];
+
+const AUDIT_DATA = [
+  { type:'DISPATCHED', typeCls:'badge-approved', detail:'T13 critical alert → admin@dasig.edu', time:'2m ago' },
+  { type:'DISPATCHED', typeCls:'badge-approved', detail:'T8 deadline alert → 3 validators (CIT-U)', time:'8m ago' },
+  { type:'FAILED',     typeCls:'badge-failed',   detail:'Email retry 1/3 → contrib@silliman.edu', time:'14m ago' },
+  { type:'DISPATCHED', typeCls:'badge-approved', detail:'T14 institution alert → admin@dasig.edu', time:'14m ago' },
+  { type:'DISPATCHED', typeCls:'badge-approved', detail:'T7 publish fail → admin@dasig.edu', time:'1h ago' },
+  { type:'RETRYING',   typeCls:'badge-pending',  detail:'T7 email retry 2/3 → contrib@cit.edu', time:'1h ago' },
+];
+
+// ── RENDER ───────────────────────────────────────────────────────────
+function renderNotifItem(n, incoming = false) {
+  const cls = [
+    'notif-item',
+    n.unread ? 'unread' : '',
+    n.critical ? 'critical' : '',
+    n.warning ? 'warning-bg' : '',
+    incoming ? 'incoming' : '',
+  ].filter(Boolean).join(' ');
+
+  const tags = n.tags.map(t =>
+    `<span class="badge ${t.cls || 'badge-system'}">${t.l}</span>`
+  ).join('');
+
+  return `
+    <a class="${cls}" data-cat="${n.cat}" data-id="${n.id}" href="#" onclick="handleNotifClick(event,'${n.id}','${n.link}')">
+      ${n.unread ? '<div class="unread-dot"></div>' : ''}
+      <div class="notif-icon-wrap ${n.iconCls}">
+        <i data-lucide="${n.icon}" style="width:18px;height:18px;"></i>
+      </div>
+      <div class="notif-body">
+        <div class="notif-top-row">
+          <div class="notif-sender">${n.sender}</div>
+          <div class="notif-time">${n.time}</div>
+        </div>
+        <div class="notif-text">${n.text}</div>
+        <div class="notif-tags">
+          ${tags}
+          <a href="${n.link}" class="notif-deeplink" onclick="event.stopPropagation()">
+            ${n.linkLabel}
+            <i data-lucide="arrow-right" style="width:11px;height:11px;"></i>
+          </a>
+        </div>
+      </div>
+    </a>`;
+}
+
+function renderAuditLog() {
+  const list = document.getElementById('auditList');
+  list.innerHTML = AUDIT_DATA.map(a => `
+    <div class="audit-row">
+      <span class="audit-type badge ${a.typeCls}" style="font-size:9px;">${a.type}</span>
+      <div class="audit-detail" style="flex:1;">${a.detail}</div>
+      <div class="audit-time">${a.time}</div>
+    </div>`).join('');
+}
+
+function renderNotifList(filter = 'all') {
+  const list = document.getElementById('notifList');
+  const items = filter === 'all' ? NOTIFS : NOTIFS.filter(n => {
+    if (filter === 'unread')      return n.unread;
+    if (filter === 'submissions') return n.cat === 'submissions';
+    if (filter === 'publishing')  return n.cat === 'publishing';
+    if (filter === 'system')      return n.cat === 'system';
+    if (filter === 'overrides')   return n.cat === 'overrides';
+    if (filter === 'deadline')    return n.cat === 'deadline';
+    return true;
+  });
+
+  // Group by date
+  const groups = {};
+  items.forEach(n => {
+    if (!groups[n.group]) groups[n.group] = [];
+    groups[n.group].push(n);
+  });
+
+  let html = '';
+  for (const [grp, grpItems] of Object.entries(groups)) {
+    html += `<div class="notif-date-group">${grp}</div>`;
+    html += grpItems.map(n => renderNotifItem(n)).join('');
+  }
+
+  list.innerHTML = html;
+  lucide.createIcons();
+}
+
+// ── INTERACTIONS ─────────────────────────────────────────────────────
+function filterNotifs(btn, filter) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderNotifList(filter);
+}
+
+function handleNotifClick(e, id, link) {
+  e.preventDefault();
+  // Mark as read
+  const notif = NOTIFS.find(n => n.id === id);
+  if (notif && notif.unread) {
+    notif.unread = false;
+    const unreadCount = NOTIFS.filter(n => n.unread).length;
+    updateBadgeCounts(unreadCount);
+    renderNotifList(document.querySelector('.tab.active').dataset.filter);
+  }
+}
+
+function markAllRead() {
+  NOTIFS.forEach(n => n.unread = false);
+  updateBadgeCounts(0);
+  renderNotifList(document.querySelector('.tab.active').dataset.filter);
+  showToast('check-check', '#10B981', 'All notifications marked as read.');
+}
+
+function updateBadgeCounts(count) {
+  const badge = document.getElementById('navBadge');
+  const previewBadge = document.getElementById('bellPreviewBadge');
+  const unreadEl = document.getElementById('bellUnread');
+  const queueEl = document.getElementById('sseQueueCount');
+  badge.textContent = count;
+  previewBadge.textContent = count;
+  unreadEl.textContent = count;
+  queueEl.textContent = count;
+  document.getElementById('panelMeta').textContent = `${NOTIFS.length} notifications · ${count} unread`;
+  if (count === 0) {
+    badge.style.display = 'none';
+    previewBadge.style.display = 'none';
+  } else {
+    badge.style.display = 'flex';
+    previewBadge.style.display = 'flex';
+  }
+}
+
+function toggleBellActive() {
+  const btn = document.getElementById('bellPreviewBtn');
+  btn.style.background = btn.style.background === 'var(--color-blue-brand)' ? 'var(--color-navy-deep)' : 'var(--color-blue-brand)';
+}
+
+function refreshPanel() {
+  const list = document.getElementById('notifList');
+  list.style.opacity = '0.5';
+  setTimeout(() => {
+    list.style.opacity = '1';
+    renderNotifList(document.querySelector('.tab.active').dataset.filter);
+  }, 400);
+}
+
+// ── SSE SIMULATION ───────────────────────────────────────────────────
+const SSE_EVENTS = [
+  { trigger:'T1',  cat:'submissions', icon:'file-plus', iconCls:'icon-navy',
+    sender:'Submission · CIT-U',
+    text:'<strong>Paulo Mendoza</strong> (CIT-U) submitted <em>"CIT-U World Environment Day"</em> for validation.',
+    tags:[{l:'T1',cls:'badge-pending'}], link:'#/validation/q/sub-new1', linkLabel:'Open Queue',
+    toastColor:'#3B82F6', toastMsg:'New submission from CIT-U awaiting validation.' },
+  { trigger:'T8',  cat:'deadline',    icon:'clock',       iconCls:'icon-warning',
+    sender:'Deadline Watch · Silliman',
+    text:'<strong>URGENT:</strong> <em>"Silliman Biodiversity Week"</em> publishes in <strong>29 minutes</strong> — not yet validated.',
+    tags:[{l:'T8',cls:'badge-pending'}], link:'#/validation/q/sub-new2', linkLabel:'Review Now',
+    warning:true, toastColor:'#F59E0B', toastMsg:'Validation deadline in 29 min — Silliman submission.' },
+  { trigger:'T13', cat:'system',      icon:'shield-alert', iconCls:'icon-error',
+    sender:'System · Token Health',
+    text:'<strong>CRITICAL:</strong> Facebook token re-validation triggered. Checking token health…',
+    tags:[{l:'T13',cls:'badge-critical'}], link:'#/settings/token', linkLabel:'Check Token',
+    critical:true, toastColor:'#EF4444', toastMsg:'Critical: Token validation check triggered.' },
+  { trigger:'T5',  cat:'publishing',  icon:'check-circle-2', iconCls:'icon-success',
+    sender:'Publishing Engine',
+    text:'<em>"USC Environment Forum II"</em> published successfully to the DASIG Facebook page.',
+    tags:[{l:'T5',cls:'badge-published'}], link:'#/posts/fb-live', linkLabel:'View Post',
+    toastColor:'#10B981', toastMsg:'Post published successfully to Facebook.' },
+  { trigger:'T7',  cat:'publishing',  icon:'x-circle', iconCls:'icon-error',
+    sender:'Publishing Engine',
+    text:'<strong>Publish failed</strong> for <em>"NORSU Open Day 2025"</em>. Error: token rate limit hit.',
+    tags:[{l:'T7',cls:'badge-failed'}], link:'#/resolution-center/new', linkLabel:'Resolve',
+    critical:true, toastColor:'#EF4444', toastMsg:'Publishing failed — manual action required.' },
+];
+
+let sseEventIdx = 0;
+let eventCount = 247;
+
+function simulateSSE() {
+  const btn = document.getElementById('sseSimBtn');
+  btn.disabled = true;
+  btn.innerHTML = `<i data-lucide="loader-2" style="width:12px;height:12px;animation:spin 1s linear infinite;"></i> Receiving…`;
+
+  // Add spinner keyframe if not present
+  if (!document.getElementById('spin-style')) {
+    const s = document.createElement('style');
+    s.id = 'spin-style';
+    s.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+    document.head.appendChild(s);
+  }
+
+  lucide.createIcons();
+
+  setTimeout(() => {
+    const evt = SSE_EVENTS[sseEventIdx % SSE_EVENTS.length];
+    sseEventIdx++;
+    eventCount++;
+
+    // Create new notif
+    const newNotif = {
+      id: 'sse-' + Date.now(),
+      trigger: evt.trigger,
+      cat: evt.cat,
+      unread: true,
+      critical: evt.critical || false,
+      warning: evt.warning || false,
+      icon: evt.icon,
+      iconCls: evt.iconCls,
+      sender: evt.sender,
+      time: 'just now',
+      text: evt.text,
+      tags: evt.tags,
+      link: evt.link,
+      linkLabel: evt.linkLabel,
+      group: 'Today'
+    };
+
+    NOTIFS.unshift(newNotif);
+
+    // Update event counter
+    document.getElementById('sseEventCount').textContent = eventCount;
+    document.getElementById('sseStatus').textContent = `Connected — /api/notifications/stream · Last event: ${newNotif.time}`;
+
+    // Update badge
+    const unreadCount = NOTIFS.filter(n => n.unread).length;
+    updateBadgeCounts(unreadCount);
+
+    // Re-render list if on 'all' or matching filter
+    const activeFilter = document.querySelector('.tab.active').dataset.filter;
+    if (activeFilter === 'all' || activeFilter === evt.cat || activeFilter === 'unread') {
+      renderNotifList(activeFilter);
+      // Make first item animate as incoming
+      setTimeout(() => {
+        const firstItem = document.querySelector('.notif-item');
+        if (firstItem) firstItem.classList.add('incoming');
+        lucide.createIcons();
+      }, 10);
+    }
+
+    // Add to audit log
+    AUDIT_DATA.unshift({ type:'DISPATCHED', typeCls:'badge-approved', detail:`${evt.trigger} → in-app (SSE)`, time:'just now' });
+    renderAuditLog();
+
+    // Show toast
+    showToast(evt.icon, evt.toastColor, evt.toastMsg);
+
+    btn.disabled = false;
+    btn.innerHTML = `<i data-lucide="radio" style="width:12px;height:12px;"></i> Simulate event`;
+    lucide.createIcons();
+  }, 900);
+}
+
+function showToast(icon, color, msg) {
+  const area = document.getElementById('toastArea');
+  const toast = document.createElement('div');
+  toast.className = 'live-toast';
+  toast.innerHTML = `
+    <div class="toast-icon-wrap" style="background:${color}22;">
+      <i data-lucide="${icon}" style="width:14px;height:14px;color:${color};"></i>
+    </div>
+    <div>
+      <div class="toast-title">SSE Event Received</div>
+      <div class="toast-body">${msg}</div>
+    </div>`;
+  area.appendChild(toast);
+  lucide.createIcons();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => toast.classList.add('show'));
+  });
+  setTimeout(() => {
+    toast.classList.remove('show');
+    toast.classList.add('hide');
+    setTimeout(() => toast.remove(), 400);
+  }, 4000);
+}
+
+// ── AUTO SSE SIMULATION ───────────────────────────────────────────────
+function autoSimulate() {
+  const delays = [8000, 15000, 23000, 38000, 52000];
+  delays.forEach(d => setTimeout(() => simulateSSE(), d));
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────
+renderNotifList('all');
+renderAuditLog();
+lucide.createIcons();
+autoSimulate();
+</script>
+</body>
+</html>

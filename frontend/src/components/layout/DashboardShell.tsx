@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { User } from '../../types/auth.types'
 import Spinner from '../common/Spinner'
 
-export type DashboardNavId = 'home' | 'submit' | 'institution-management' | 'user-management' | 'scheduler' | 'analytics' | 'media-repository'
+export type DashboardNavId = 'home' | 'submit' | 'institution-management' | 'user-management' | 'scheduler' | 'analytics' | 'media-repository' | 'notifications'
 
 interface DashboardShellProps {
   user: User
@@ -191,6 +191,13 @@ function dashboardNavItems(user: User): DashboardNavItem[] {
       icon: 'ti ti-photo',
       label: 'Media Repository',
       path: '/media-repository',
+      visible: true,
+    },
+    {
+      id: 'notifications',
+      icon: 'ti ti-bell',
+      label: 'Notifications',
+      path: '/notifications',
       visible: true,
     },
     {

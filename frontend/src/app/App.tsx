@@ -30,6 +30,7 @@ import ValidationQueueScreen from "../features/validation/ValidationQueueScreen"
 import UserInvitationsScreen from "../features/user-management/UserInvitationsScreen";
 import InstitutionManagementScreen from "../features/institution-management/InstitutionManagementScreen";
 import MediaRepositoryScreen from "../features/media-repository/MediaRepositoryScreen";
+import NotificationsScreen from "../features/notifications/NotificationsScreen";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import SessionModal from "../components/modals/SessionModal";
 import Toast from "../components/common/Toast";
@@ -665,6 +666,14 @@ function App() {
             element={
               <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator", "contributor"]}>
                 <MediaRepositoryScreen user={currentUser!} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator", "contributor"]}>
+                <NotificationsScreen user={currentUser!} />
               </ProtectedRoute>
             }
           />
