@@ -247,25 +247,31 @@ public class SubmissionService {
                 entityManager.getReference(User.class, user.userId()),
                 "SUBMISSION_SUBMITTED", null, null,
                 submissionId,
-                Map.of("scheduledAt", submission.getScheduledAt().toString()));
+                submission.getScheduledAt() != null
+                        ? Map.of("scheduledAt", submission.getScheduledAt().toString())
+                        : Map.of());
 
         // T1 — notify all institution validators (spec: contributor does not receive T1)
-        String contributorEmail = submission.getContributor().getEmail();
-        String scheduledPart = submission.getScheduledAt() != null
-                ? " — scheduled for " + formatInstant(submission.getScheduledAt())
-                : "";
-        String t1Message = contributorEmail + " submitted '" + submission.getEventTitle()
-                + "' for review" + scheduledPart + ".";
-        String submissionLink = "/submissions/" + submissionId;
+        try {
+            String contributorEmail = submission.getContributor().getEmail();
+            String scheduledPart = submission.getScheduledAt() != null
+                    ? " — scheduled for " + formatInstant(submission.getScheduledAt())
+                    : "";
+            String t1Message = contributorEmail + " submitted '" + submission.getEventTitle()
+                    + "' for review" + scheduledPart + ".";
+            String submissionLink = "/submissions/" + submissionId;
 
-        List<User> validators = userRepository
-                .findByInstitutionIdAndRoleOrderByCreatedAtDesc(user.institutionId(), UserRole.validator);
-        for (User validator : validators) {
-            notificationService.createNotification(
-                    validator,
-                    NotificationEventType.submission_pending,
-                    t1Message,
-                    submissionLink);
+            List<User> validators = userRepository
+                    .findByInstitutionIdAndRoleOrderByCreatedAtDesc(user.institutionId(), UserRole.validator);
+            for (User validator : validators) {
+                notificationService.createNotification(
+                        validator,
+                        NotificationEventType.submission_pending,
+                        t1Message,
+                        submissionLink);
+            }
+        } catch (Exception e) {
+            log.warn("T1 notifications skipped for submission {} — {}", submissionId, e.getMessage());
         }
 
         log.info("Submission {} → PENDING by contributor {}", submissionId, user.userId());

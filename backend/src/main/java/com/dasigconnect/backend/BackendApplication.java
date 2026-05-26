@@ -70,6 +70,9 @@ public class BackendApplication {
                 .baselineVersion(baselineVersion)
                 .load();
 
+        flyway.repair();
+        flyway.migrate();
+        System.out.println("Flyway migrate() completed.");
         System.out.println("==================================================");
         return flyway;
     }

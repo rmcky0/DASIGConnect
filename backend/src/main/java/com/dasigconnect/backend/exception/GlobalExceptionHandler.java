@@ -59,6 +59,12 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", "Duplicate or invalid data", "status", 409));
     }
 
+    @ExceptionHandler(SlotAlreadyTakenException.class)
+    public ResponseEntity<Map<String, Object>> handleSlotAlreadyTaken(SlotAlreadyTakenException ex) {
+        return ResponseEntity.status(409)
+                .body(Map.of("error", ex.getMessage(), "status", 409));
+    }
+
     @ExceptionHandler(GuardRailViolationException.class)
     public ResponseEntity<Map<String, Object>> handleGuardRailViolation(GuardRailViolationException ex) {
         String message = ex.getViolations().isEmpty()

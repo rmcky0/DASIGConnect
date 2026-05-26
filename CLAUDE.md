@@ -101,7 +101,7 @@ Current branch: `module3`
 ### Completed
 
 - UC-3.1 publishing pipeline and master calendar backend is fully implemented (19 new files, 3 modified).
-- Flyway V12 migration adds `publication_attempts` and `facebook_page_tokens` tables.
+- Flyway V12 + V13 migrations add `publication_attempts` and `facebook_page_tokens` tables.
 - `TokenEncryptionService` encrypts Facebook Page Access Token with AES-256-GCM before DB storage.
 - `FacebookPublisherService` integrates with Facebook Graph API v25.0 via Java HttpClient: 2-step photo publish, single-call video publish, 3-attempt retry with 5s/25s/125s backoff.
 - `PublishingSchedulerJob` triggers every minute (GR-T5). Transaction is committed before Graph API calls to respect HikariCP 5-connection limit.
@@ -116,20 +116,39 @@ Current branch: `module3`
 - Reset password page implemented. Session expiry countdown wired from JWT `exp`.
 - Dashboard stats use live endpoints. Invite/manage modal lists pending invitations and supports resend.
 - App auth state hydrates from `GET /api/v1/me` after login, invite accept, session relogin, and saved-token restore.
+- **Save draft / submit-for-review browser flow verified end-to-end** — 500 bug fixed (see Flyway and notification fixes below).
+- **Live Facebook publish verified** — photo post published to the DASIG Facebook Page from a scheduled submission.
+
+### Flyway Migration History Fix (2026-05-26)
+
+The Supabase DB had a mixed Flyway state: V10 was recorded with checksum 0 (manually baselined), and V6–V9 were local files that were never applied while V10 was already in `flyway_schema_history`. This caused `FlywayValidateException` on startup.
+
+Fix applied:
+- V6–V9 migration files removed from the codebase (they were never applied to the DB).
+- Their content recreated as V14–V17 (linear versions after V13), so Flyway applies them in clean order.
+- V17 (`asset_tags`) was rewritten to `DROP TABLE IF EXISTS asset_tags CASCADE` before recreating — V4 had created `asset_tags` with columns `(asset_id, tag, source)` which do not match the `AssetTag` entity mapping `(media_asset_id, label)`.
+- `BackendApplication.flyway()` bean now calls `flyway.repair()` before `flyway.migrate()` to fix stored checksums; no `outOfOrder` or `validateOnMigrate=false` needed.
+- Current migration sequence: V1–V5 (applied), V10 (applied), V11–V17 (applied on 2026-05-26 startup).
+
+### Submit 500 Fix (2026-05-26)
+
+`SubmissionService.submit()` called `notificationService.createNotification()` directly inside the main `@Transactional` method. When the `notifications` table didn't exist (missing Flyway migration), the INSERT failed and rolled back the entire transaction — including the PENDING status change — returning 500 to the frontend. Fix: wrapped the T1 notification block in try-catch so the submission always reaches PENDING even if the notification insert fails. The notifications table is now created by V14 and this guard is no longer needed for normal operation, but is retained as a defensive measure.
+
+### GlobalExceptionHandler Fix (2026-05-26)
+
+`SlotAlreadyTakenException` was not handled by `GlobalExceptionHandler` and fell through to the catch-all, returning 500 instead of 409 Conflict. Added explicit handler returning 409 with the exception message.
 
 ### Verification
 
 - Backend: **208 tests passing** (0 failures, 0 errors) — all 163 prior tests pass plus UC-3.1 additions.
 - Frontend: `npm.cmd run build` passing.
-- Migration sanity: `mvn clean` and `mvn -DskipTests package` passed.
-- Fresh Supabase DB startup: backend applied V1 through V4 successfully on a clean schema.
+- Migration sanity: `mvn clean` and `mvn spring-boot:run` applied V11–V17 successfully on existing Supabase DB.
+- Submit-for-review flow: confirmed working end-to-end in the browser.
+- Facebook publish: confirmed — photo post published to DasigConnect Facebook Page.
 
 ### Known Gaps
 
 - **UC-3.1 frontend**: Calendar page (FullCalendar.js) and Resolution Center page not yet wired. Backend is ready.
-- **Live Facebook publish test**: Requires valid Facebook credentials in environment. App is in Development mode — posts visible only to Meta developer/admin accounts during pilot.
-- **V12 migration on deployed Supabase**: Not yet applied to the remote instance.
-- Save draft / submit-for-review browser flow still needs manual verification (active Module 1 blocker).
 - Submission queue design needs review with real data and mobile widths.
 - Submission lookups do not return categories, tags, or preferred time slots.
 - Media library / asset picker needs UC-2.2 backend: `GET/DELETE /api/v1/media-assets`.
@@ -203,3 +222,7 @@ See `TASKS.md` for the detailed task checklist and current gaps.
 - The frontend should display institution names from `GET /api/v1/me`; email-domain guessing is only a fallback.
 - Do not increase HikariCP max pool size past 5 unless the Supabase plan/pooler changes.
 - Do not log JWTs, passwords, reset tokens, invitation tokens, or API keys.
+- `BackendApplication.flyway()` calls `repair()` then `migrate()` explicitly. Do not add `outOfOrder=true` or `validateOnMigrate=false` — fix schema history issues by renumbering migration files instead.
+- When a migration file was never applied to a shared DB but a higher-version migration already was, do not reuse the old version number. Create new files at the next available version number.
+- V4 creates `asset_tags` with columns `(asset_id, tag, source)`. V17 drops and recreates it with `(media_asset_id, label)` to match the `AssetTag` entity. Do not revert V17.
+- Notification inserts in `SubmissionService.submit()` (T1 — notify validators) are wrapped in try-catch. This is intentional: a notification failure must never roll back the PENDING status transition.

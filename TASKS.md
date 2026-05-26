@@ -48,7 +48,7 @@ Legend: Done / In Progress / Not Started / Deferred
   - `SubmissionControllerTest`
   - `UserServiceTest`
   - `UserControllerTest`
-- Gap: save draft / submit-for-review still needs browser-level debugging and verification. The testing bypass and frontend payload defaults are in place, but the team has not yet confirmed the full flow works end to end in the UI.
+- Done: save draft / submit-for-review flow verified end-to-end in the browser. 500 on submit resolved — see Flyway + notification fixes in the Backend Verification section.
 - Deferred: `POST /api/v1/submissions/{id}/override-request`; implement in Module 3 with override request migration/service.
 
 ### UC-3.1 - Publishing Pipeline & Master Calendar (NEW)
@@ -94,7 +94,11 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: `mvn clean` and `mvn -DskipTests package` passed after the migration rename.
 - Done: fresh Supabase database startup fixed by baselining Flyway at version `0`; V1 through V4 apply correctly on a new Supabase `public` schema.
 - Done: backend starts successfully against the updated Supabase database on a temporary port after migrations are applied.
-- Note: `.\mvnw.cmd` fails in the current PowerShell environment; direct Maven from `.m2/wrapper/dists` was used successfully.
+- Done: Flyway mixed-history fix (2026-05-26) — V6–V9 removed from codebase (never applied); recreated as V14–V17; V17 drops and recreates `asset_tags` to fix column-name mismatch with `AssetTag` entity; `BackendApplication.flyway()` now calls `repair()` + `migrate()` explicitly; V10 checksum repaired; V11–V17 applied cleanly.
+- Done: `SubmissionService.submit()` 500 fix — T1 notification wrapped in try-catch so a missing `notifications` table never rolls back the PENDING status transition.
+- Done: `GlobalExceptionHandler` — added `SlotAlreadyTakenException` handler returning 409 Conflict instead of 500.
+- Done: live Facebook photo publish confirmed end-to-end — post published to DasigConnect Facebook Page from a scheduled submission.
+- Note: `.\mvnw.cmd` fails in the current PowerShell environment; use `mvnw` (bash) or direct Maven from `.m2/wrapper/dists`.
 
 ### Pending - Backend
 
@@ -135,7 +139,7 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done locally: `.jpg` uploads are normalized to backend-supported `jpeg`.
 - Done locally: submission queue has been restyled into a clearer left-side queue panel with count, stronger item containers, active state, and improved spacing.
 - Done locally: submit buttons are not disabled by readiness score during testing.
-- Gap: save draft and submit-for-review are still treated as unresolved until the browser flow is manually verified against the active backend/Supabase environment.
+- Done: save draft and submit-for-review browser flow verified end-to-end against the active backend/Supabase environment (2026-05-26).
 
 ### Dashboard
 
@@ -147,7 +151,7 @@ Legend: Done / In Progress / Not Started / Deferred
 ### Pending - Frontend
 
 - Gap: submission queue design improved locally but still needs user/team review against real data and mobile widths.
-- Gap: save draft / submit review still needs final UI-level debugging; current local changes are intended to unblock testing but are not yet proven end to end.
+- Done: save draft / submit-for-review verified end-to-end (2026-05-26).
 - Gap: category/tag/preferred-time selection is limited because backend lookups do not currently return those fields.
 - Gap: `AssetPickerModal` cannot be fully wired until UC-2.2 media asset list/delete endpoints exist.
 - Gap: validator review actions need UC-2.1 backend.
