@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   createDraft,
   deleteDraft,
   getSubmission,
+  reorderSubmissionMedia,
   submitForReview,
   updateDraft,
   uploadSubmissionMedia,
   validateGuardRails,
   type GuardRailResult,
   type SavedMediaAsset,
+  type SubmissionLookups,
   type SubmissionPayload,
   type SubmissionStatus,
   type SubmissionSummary,
@@ -18,8 +20,13 @@ import {
   useSubmissionLookups,
   useSubmissions,
 } from "../../hooks/useSubmissions";
+import { useFacebookPreviewData } from "../../hooks/useFacebookPreviewData";
+import { fileMediaKey, savedMediaKey } from "../../hooks/useMediaReorder";
 import type { User } from "../../types/auth.types";
+import type { FacebookPreviewDetailsData } from "../../types/facebook";
 import { useToast } from "../../context/ToastContext";
+import FacebookPreviewCard from "../../components/facebook/FacebookPreviewCard";
+import FacebookPreviewModal from "../../components/facebook/FacebookPreviewModal";
 
 interface SubmissionScreenProps {
   user: User;
@@ -27,6 +34,7 @@ interface SubmissionScreenProps {
 
 interface FormState {
   id: string | null;
+  status: SubmissionStatus;
   eventTitle: string;
   eventDate: string;
   caption: string;
@@ -37,6 +45,7 @@ interface FormState {
   tags: string[];
   files: File[];
   savedAssets: SavedMediaAsset[];
+  mediaOrder: string[];
 }
 
 type QueueFilter = "drafts" | "submitted" | "all";
@@ -45,6 +54,7 @@ type SaveState = "idle" | "saving" | "saved";
 
 const initialForm: FormState = {
   id: null,
+  status: "draft",
   eventTitle: "",
   eventDate: "",
   caption: "",
@@ -55,6 +65,7 @@ const initialForm: FormState = {
   tags: [],
   files: [],
   savedAssets: [],
+  mediaOrder: [],
 };
 
 const statusLabels: Record<SubmissionStatus, string> = {
@@ -80,11 +91,15 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     error: lookupsError,
   } = useSubmissionLookups();
   const toast = useToast();
+  const detailsSectionRef = useRef<HTMLElement | null>(null);
   const [filter, setFilter] = useState<QueueFilter>("drafts");
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [form, setForm] = useState<FormState>(initialForm);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [modal, setModal] = useState<ModalState>(null);
+  const [isPreviewModalOpen, setPreviewModalOpen] = useState(false);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [reorderingMedia, setReorderingMedia] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [guardRails, setGuardRails] = useState<GuardRailResult | null>(null);
   const [guardRailError, setGuardRailError] = useState("");
@@ -118,32 +133,62 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     () => calculateReadiness(form, guardRails),
     [form, guardRails],
   );
-  const previewCaption =
-    form.caption.trim() ||
-    "Your caption preview will appear here as you write.";
+  const facebookPreview = useFacebookPreviewData({
+    caption: form.caption,
+    scheduledAt,
+    files: form.files,
+    savedAssets: form.savedAssets,
+    mediaOrder: form.mediaOrder,
+  });
+  const previewValidation = useMemo(
+    () => getPreviewValidation(form, scheduledAt, lookups, guardRails),
+    [form, guardRails, lookups, scheduledAt],
+  );
+  const previewDetails = useMemo<FacebookPreviewDetailsData>(
+    () =>
+      getPreviewDetails({
+        form,
+        institution: user.inst,
+        scheduledAt,
+        lookups,
+        guardRails,
+        guardRailError,
+        missingItems: previewValidation.missingItems,
+      }),
+    [
+      form,
+      guardRails,
+      guardRailError,
+      lookups,
+      previewValidation.missingItems,
+      scheduledAt,
+      user.inst,
+    ],
+  );
+  const submitDisabledReason =
+    previewValidation.blockingErrors.length > 0
+      ? previewValidation.blockingErrors[0]
+      : undefined;
+  const canSubmitCurrentSubmission = form.status === "draft";
 
   useEffect(() => {
-    if (!scheduledAt) {
-      setGuardRails(null);
-      setGuardRailError("");
-      return;
-    }
-
     const timer = window.setTimeout(() => {
+      if (!scheduledAt) {
+        setGuardRails(null);
+        setGuardRailError("");
+        return;
+      }
+
       validateGuardRails(scheduledAt)
         .then((response) => {
           setGuardRails(response.data);
           setGuardRailError("");
         })
-        .catch((err: any) => {
+        .catch((err: unknown) => {
           setGuardRails(null);
-          setGuardRailError(
-            err.response?.data?.error ||
-              err.message ||
-              "Slot validation is unavailable.",
-          );
+          setGuardRailError(getErrorMessage(err, "Slot validation is unavailable."));
         });
-    }, 350);
+    }, scheduledAt ? 350 : 0);
 
     return () => window.clearTimeout(timer);
   }, [scheduledAt]);
@@ -158,6 +203,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       const { data: submission } = await getSubmission(summary.id);
       setForm({
         id: submission.id,
+        status: submission.status,
         eventTitle: submission.eventTitle || "",
         eventDate: submission.eventDate || "",
         caption: submission.caption || "",
@@ -172,7 +218,11 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         tags: submission.tags ?? [],
         files: [],
         savedAssets: submission.mediaAssets ?? [],
+        mediaOrder: (submission.mediaAssets ?? []).map((asset) =>
+          savedMediaKey(asset.id),
+        ),
       });
+      setActiveMediaIndex(0);
     } catch {
       toast.error("Could not load submission detail.");
     }
@@ -189,28 +239,35 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       if (form.files.length > 0) {
         const uploadResult = await uploadSubmissionMedia(
           response.data.id,
-          form.files,
+          getOrderedLocalFiles(form),
         );
         if (uploadResult) finalResponse = uploadResult as typeof response;
       }
-      const savedAssets =
-        (finalResponse.data as SubmissionSummary).mediaAssets ?? [];
+      const savedAssets = finalResponse.data.mediaAssets ?? [];
+      const orderedAssetIds = resolveSavedMediaOrder(form, savedAssets);
+      if (orderedAssetIds.length === savedAssets.length && savedAssets.length > 1) {
+        finalResponse = await reorderSubmissionMedia(
+          finalResponse.data.id,
+          orderedAssetIds,
+        );
+      }
+      const orderedSavedAssets = finalResponse.data.mediaAssets ?? savedAssets;
       setForm((current) => ({
         ...current,
         id: finalResponse.data.id,
+        status: finalResponse.data.status,
         files: [],
-        savedAssets,
+        savedAssets: orderedSavedAssets,
+        mediaOrder: orderedSavedAssets.map((asset) => savedMediaKey(asset.id)),
       }));
       setSubmissions((current) =>
         upsertSubmission(current, finalResponse.data),
       );
       setSaveState("saved");
       toast.success("Draft saved.");
-    } catch (err: any) {
+    } catch (err: unknown) {
       setSaveState("idle");
-      toast.error(
-        err.response?.data?.error || err.message || "Draft could not be saved.",
-      );
+      toast.error(getErrorMessage(err, "Draft could not be saved."));
     }
   }
 
@@ -221,26 +278,46 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       const draft = form.id
         ? await updateDraft(form.id, payload)
         : await createDraft(payload);
+      let draftResponse = draft;
       if (form.files.length > 0) {
         try {
-          await uploadSubmissionMedia(draft.data.id, form.files);
-        } catch (uploadErr: any) {
+          const uploadResult = await uploadSubmissionMedia(
+            draft.data.id,
+            getOrderedLocalFiles(form),
+          );
+          if (uploadResult) draftResponse = uploadResult as typeof draft;
+        } catch (uploadErr: unknown) {
           toast.warning(
             "Media upload skipped: " +
-              (uploadErr.message || "Supabase not configured"),
+              getErrorMessage(uploadErr, "Supabase not configured"),
           );
         }
       }
-      const submitted = await submitForReview(draft.data.id);
+      const savedAssets = draftResponse.data.mediaAssets ?? [];
+      const orderedAssetIds = resolveSavedMediaOrder(form, savedAssets);
+      if (orderedAssetIds.length === savedAssets.length && savedAssets.length > 1) {
+        draftResponse = await reorderSubmissionMedia(
+          draftResponse.data.id,
+          orderedAssetIds,
+        );
+      }
+      const submitted = await submitForReview(draftResponse.data.id);
       setSubmissions((current) => upsertSubmission(current, submitted.data));
-      setForm((current) => ({ ...current, id: submitted.data.id, files: [] }));
+      setForm((current) => ({
+        ...current,
+        id: submitted.data.id,
+        status: submitted.data.status,
+        files: [],
+        savedAssets: submitted.data.mediaAssets ?? current.savedAssets,
+        mediaOrder: (submitted.data.mediaAssets ?? current.savedAssets).map(
+          (asset) => savedMediaKey(asset.id),
+        ),
+      }));
       setModal("success");
       toast.success("Submission sent for review.");
       void refresh();
-    } catch (err: any) {
-      toast.error(
-        err.response?.data?.error || err.message || "Submission failed.",
-      );
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Submission failed."));
     } finally {
       setSubmitting(false);
     }
@@ -261,23 +338,71 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       setForm(initialForm);
       setModal(null);
       toast.info("Draft deleted.");
-    } catch (err: any) {
-      toast.error(
-        err.response?.data?.error ||
-          err.message ||
-          "Draft could not be deleted.",
-      );
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Draft could not be deleted."));
     }
   }
 
   function handleFiles(files: FileList | null) {
     if (!files) return;
+    const nextFiles = Array.from(files);
     setForm((current) => ({
       ...current,
-      files: [...current.files, ...Array.from(files)],
+      files: [...current.files, ...nextFiles],
+      mediaOrder: [
+        ...current.mediaOrder,
+        ...nextFiles.map((file) => fileMediaKey(file)),
+      ],
     }));
     setSelectedFileIndex(0);
+    setActiveMediaIndex(0);
     setSaveState("idle");
+  }
+
+  async function handleReorderMedia(orderedIds: string[]) {
+    const sortedSavedAssets = sortSavedAssetsByOrder(form.savedAssets, orderedIds);
+    const sortedFiles = sortFilesByOrder(form.files, orderedIds);
+    setForm((current) => ({
+      ...current,
+      savedAssets: sortedSavedAssets,
+      files: sortedFiles,
+      mediaOrder: orderedIds,
+    }));
+    setSaveState("idle");
+
+    if (!form.id || sortedFiles.length > 0 || sortedSavedAssets.length <= 1) {
+      return;
+    }
+
+    setReorderingMedia(true);
+    try {
+      const savedIds = orderedIds
+        .filter((id) => id.startsWith("saved:"))
+        .map((id) => id.replace("saved:", ""));
+      const { data } = await reorderSubmissionMedia(form.id, savedIds);
+      const nextAssets = data.mediaAssets ?? sortedSavedAssets;
+      setForm((current) => ({
+        ...current,
+        savedAssets: nextAssets,
+        mediaOrder: nextAssets.map((asset) => savedMediaKey(asset.id)),
+      }));
+      setSubmissions((current) => upsertSubmission(current, data));
+      toast.success("Media order updated.");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Media order could not be saved."));
+    } finally {
+      setReorderingMedia(false);
+    }
+  }
+
+  function handleEditPreviewDetails() {
+    setPreviewModalOpen(false);
+    window.setTimeout(() => {
+      detailsSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
   }
 
   return (
@@ -541,7 +666,11 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                           files: current.files.filter(
                             (_, fileIndex) => fileIndex !== index,
                           ),
+                          mediaOrder: current.mediaOrder.filter(
+                            (id) => id !== fileMediaKey(file),
+                          ),
                         }));
+                        setActiveMediaIndex(0);
                       }}
                     >
                       <i className="ti ti-x"></i>
@@ -552,7 +681,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
             )}
           </section>
 
-          <section className="sub-form-section">
+          <section className="sub-form-section" ref={detailsSectionRef}>
             <SectionHead
               icon="ti-edit"
               tone="gold"
@@ -805,31 +934,16 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
             <div className="sub-guard-section-title">
               <i className="ti ti-brand-facebook"></i> Facebook Preview
             </div>
-            <div className="sub-fb-preview">
-              <div className="sub-fb-preview-head">
-                <div className="sub-fb-page-icon">
-                  <i className="ti ti-brand-facebook"></i>
-                </div>
-                <div>
-                  <div className="sub-fb-page-name">DASIG Facebook Page</div>
-                  <div className="sub-fb-page-date">
-                    {scheduledAt ? formatDate(scheduledAt) : "Unscheduled"}{" "}
-                    <i className="ti ti-world"></i>
-                  </div>
-                </div>
-              </div>
-              <div className="sub-fb-preview-img">
-                {form.files[selectedFileIndex]?.type.startsWith("image/") ? (
-                  <img
-                    src={filePreviewUrl(form.files[selectedFileIndex])}
-                    alt={form.files[selectedFileIndex].name}
-                  />
-                ) : (
-                  <i className="ti ti-photo"></i>
-                )}
-              </div>
-              <div className="sub-fb-preview-caption">{previewCaption}</div>
-            </div>
+            <FacebookPreviewCard
+              pageName={facebookPreview.pageName}
+              pageAvatarUrl={facebookPreview.pageAvatarUrl}
+              publishDate={facebookPreview.publishDate}
+              caption={facebookPreview.caption}
+              mediaItems={facebookPreview.mediaItems}
+              activeMediaIndex={activeMediaIndex}
+              onMediaIndexChange={setActiveMediaIndex}
+              onOpen={() => setPreviewModalOpen(true)}
+            />
           </div>
 
           <div className="sub-guard-actions">
@@ -850,6 +964,36 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           </div>
         </aside>
       </div>
+
+      <FacebookPreviewModal
+        open={isPreviewModalOpen}
+        pageName={facebookPreview.pageName}
+        pageAvatarUrl={facebookPreview.pageAvatarUrl}
+        publishDate={facebookPreview.publishDate}
+        caption={facebookPreview.caption}
+        mediaItems={facebookPreview.mediaItems}
+        activeMediaIndex={activeMediaIndex}
+        details={previewDetails}
+        canSaveDraft={form.status === "draft"}
+        canSubmitForReview={canSubmitCurrentSubmission}
+        submitDisabledReason={
+          canSubmitCurrentSubmission
+            ? submitDisabledReason
+            : "This submission has already moved beyond draft status."
+        }
+        isSaving={saveState === "saving"}
+        isSubmitting={submitting}
+        reorderDisabled={reorderingMedia || saveState === "saving" || submitting}
+        onClose={() => setPreviewModalOpen(false)}
+        onMediaIndexChange={setActiveMediaIndex}
+        onReorderMedia={(orderedIds) => void handleReorderMedia(orderedIds)}
+        onSaveDraft={() => void handleSave()}
+        onSubmitForReview={() => {
+          setPreviewModalOpen(false);
+          setModal("submit");
+        }}
+        onEditDetails={handleEditPreviewDetails}
+      />
 
       {modal === "submit" && (
         <ConfirmModal
@@ -1110,6 +1254,64 @@ function upsertSubmission(items: SubmissionSummary[], next: SubmissionSummary) {
   return items.map((item) => (item.id === next.id ? next : item));
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (typeof error !== "object" || error === null) return fallback;
+  const maybeError = error as {
+    message?: string;
+    response?: { data?: { error?: string } };
+  };
+  return maybeError.response?.data?.error || maybeError.message || fallback;
+}
+
+function getOrderedLocalFiles(form: FormState) {
+  if (form.mediaOrder.length === 0) return form.files;
+  const filesByKey = new Map(form.files.map((file) => [fileMediaKey(file), file]));
+  const ordered = form.mediaOrder
+    .map((id) => filesByKey.get(id))
+    .filter((file): file is File => Boolean(file));
+  return ordered.length === form.files.length ? ordered : form.files;
+}
+
+function resolveSavedMediaOrder(form: FormState, savedAssets: SavedMediaAsset[]) {
+  const existingIds = new Set(form.savedAssets.map((asset) => asset.id));
+  const newAssets = savedAssets.filter((asset) => !existingIds.has(asset.id));
+  const newAssetQueue = [...newAssets];
+  const savedIds = new Set(savedAssets.map((asset) => asset.id));
+  const resolved = form.mediaOrder
+    .map((id) => {
+      if (id.startsWith("saved:")) return id.replace("saved:", "");
+      if (id.startsWith("local:")) return newAssetQueue.shift()?.id;
+      return undefined;
+    })
+    .filter((id): id is string => Boolean(id && savedIds.has(id)));
+
+  savedAssets.forEach((asset) => {
+    if (!resolved.includes(asset.id)) resolved.push(asset.id);
+  });
+  return resolved;
+}
+
+function sortSavedAssetsByOrder(
+  savedAssets: SavedMediaAsset[],
+  orderedIds: string[],
+) {
+  const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
+  return [...savedAssets].sort((a, b) => {
+    const aIndex = orderMap.get(savedMediaKey(a.id)) ?? Number.MAX_SAFE_INTEGER;
+    const bIndex = orderMap.get(savedMediaKey(b.id)) ?? Number.MAX_SAFE_INTEGER;
+    return aIndex - bIndex;
+  });
+}
+
+function sortFilesByOrder(files: File[], orderedIds: string[]) {
+  const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
+  return [...files].sort((a, b) => {
+    const aIndex = orderMap.get(fileMediaKey(a)) ?? Number.MAX_SAFE_INTEGER;
+    const bIndex = orderMap.get(fileMediaKey(b)) ?? Number.MAX_SAFE_INTEGER;
+    return aIndex - bIndex;
+  });
+}
+
 function calculateReadiness(
   form: FormState,
   guardRails: GuardRailResult | null,
@@ -1137,6 +1339,137 @@ function calculateReadiness(
         : score >= 60
           ? "Resolve the highlighted items before sending."
           : "Complete the required fields to prepare this submission.",
+  };
+}
+
+function getPreviewValidation(
+  form: FormState,
+  scheduledAt: string | undefined,
+  lookups: SubmissionLookups,
+  guardRails: GuardRailResult | null,
+) {
+  const missingItems: string[] = [];
+  const blockingErrors: string[] = [];
+  const hasMedia = form.files.length > 0 || form.savedAssets.length > 0;
+  const oversizedFile = form.files.find(
+    (file) => file.size > lookups.maxFileSizeMb * 1024 * 1024,
+  );
+  const unsupportedFile = form.files.find(
+    (file) => !isAllowedFile(file, lookups.allowedFileTypes),
+  );
+
+  if (!form.eventTitle.trim()) missingItems.push("Add an event title.");
+  if (!form.eventDate) missingItems.push("Select the event date.");
+  if (!form.caption.trim()) missingItems.push("Write a caption.");
+  if (!hasMedia) missingItems.push("Attach at least one image or video.");
+  if (!scheduledAt) missingItems.push("Choose a preferred schedule.");
+  if (oversizedFile) {
+    missingItems.push(
+      `${oversizedFile.name} is larger than ${lookups.maxFileSizeMb} MB.`,
+    );
+  }
+  if (unsupportedFile) {
+    missingItems.push(`${unsupportedFile.name} uses an unsupported format.`);
+  }
+  if (guardRails?.blocked) {
+    missingItems.push("Resolve the blocked publishing slot.");
+  }
+
+  if (!form.eventTitle.trim()) blockingErrors.push("Event title is required.");
+  if (!form.eventDate) blockingErrors.push("Event date is required.");
+  if (!form.caption.trim()) blockingErrors.push("Caption is required.");
+  if (!hasMedia) blockingErrors.push("At least one media file is required.");
+  if (!scheduledAt) blockingErrors.push("Preferred schedule is required.");
+  if (oversizedFile) {
+    blockingErrors.push(
+      `File size must stay within ${lookups.maxFileSizeMb} MB per file.`,
+    );
+  }
+  if (unsupportedFile) {
+    blockingErrors.push("Only accepted image and video formats can be submitted.");
+  }
+  if (guardRails?.blocked) {
+    blockingErrors.push("The preferred slot is blocked by guardrails.");
+  }
+
+  return { missingItems, blockingErrors };
+}
+
+function getPreviewDetails({
+  form,
+  institution,
+  scheduledAt,
+  lookups,
+  guardRails,
+  guardRailError,
+  missingItems,
+}: {
+  form: FormState;
+  institution: string;
+  scheduledAt?: string;
+  lookups: SubmissionLookups;
+  guardRails: GuardRailResult | null;
+  guardRailError: string;
+  missingItems: string[];
+}): FacebookPreviewDetailsData {
+  const hasInvalidSize = form.files.some(
+    (file) => file.size > lookups.maxFileSizeMb * 1024 * 1024,
+  );
+  const hasInvalidType = form.files.some(
+    (file) => !isAllowedFile(file, lookups.allowedFileTypes),
+  );
+  const fileCount = form.files.length + form.savedAssets.length;
+  const fileValidation =
+    hasInvalidSize || hasInvalidType
+      ? {
+          label: "File validation",
+          value: hasInvalidSize
+            ? `${lookups.maxFileSizeMb} MB max per file`
+            : "Unsupported file format",
+          tone: "error" as const,
+        }
+      : {
+          label: "File validation",
+          value: fileCount > 0 ? "Files look ready" : "No files attached",
+          tone: fileCount > 0 ? ("ok" as const) : ("warn" as const),
+        };
+
+  const slotConfirmation = guardRailError
+    ? {
+        label: "Slot confirmation",
+        value: guardRailError,
+        tone: "warn" as const,
+      }
+    : guardRails
+      ? {
+          label: "Slot confirmation",
+          value: guardRails.clean
+            ? "Guardrails passed"
+            : `Testing override: ${guardRails.hardBlocks.length} issue(s) noted`,
+          tone: guardRails.clean ? ("ok" as const) : ("warn" as const),
+        }
+      : {
+          label: "Slot confirmation",
+          value: scheduledAt ? "Testing override active" : "No slot selected",
+          tone: scheduledAt ? ("muted" as const) : ("warn" as const),
+        };
+
+  return {
+    statusLabel: statusLabels[form.status],
+    category: form.category || "Not selected",
+    institution: institution || "Institution",
+    tags: form.tags,
+    schedule: scheduledAt ? formatDateTime(scheduledAt) : "Not scheduled",
+    fileCount,
+    fileValidation,
+    slotConfirmation,
+    aiCaptionAssist: {
+      label: "AI caption assist",
+      value: "Not available yet",
+      tone: "muted",
+    },
+    validatorNotes: form.description.trim(),
+    missingItems,
   };
 }
 

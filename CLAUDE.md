@@ -114,6 +114,11 @@ Current branch: `module3`
 - UC-3.1 frontend Calendar route `/scheduler/calendar` is wired to `GET /api/v1/calendar` using FullCalendar, reusable calendar components, status legend, event detail modal, loading/empty/error states, and refresh/retry controls.
 - UC-3.4 frontend Resolution Center route `/admin/resolution` is wired to `GET /api/v1/resolution/failures` plus retry and manual-publish start/complete/cancel actions using reusable cards, status/action components, modals, busy states, toasts, and refresh-after-action behavior.
 - UC-3.1 frontend API separation is in place: `frontend/src/api/calendarApi.ts` owns calendar calls and `frontend/src/api/resolutionApi.ts` owns Resolution Center calls.
+- Submit Content Facebook Preview is now dynamic and componentized. It reads current form/draft caption, schedule, saved assets, and local uploaded files instead of hardcoded preview data.
+- Facebook Preview card opens a responsive preview/review modal with a larger Facebook-style preview, submission details, validation/missing-field messaging, and action buttons wired to existing Save Draft / Submit for Review / Edit Details handlers.
+- Facebook Preview media now supports carousel review with arrow controls, dots/counter, and swipe gestures in both compact and modal contexts.
+- Preview modal includes a draggable media-order strip with keyboard-friendly move buttons. Reordering updates the real submission order: local files upload in the chosen order and saved draft assets persist through `PATCH /api/v1/submissions/{id}/media/order`.
+- Backend submission media reorder support added: `SubmissionMediaOrderDto`, `SubmissionController.reorderMedia`, and `SubmissionService.reorderMedia()` update `submission_media_assets.display_order` for editable submissions.
 - UC-1.3 submission backend is implemented and tested (on `feature/uc13-submission-backend`, pending merge).
 - Frontend API wiring matches backend contracts for submissions, guard rail evaluation, media upload metadata, institutions, and lookups.
 - Reset password page implemented. Session expiry countdown wired from JWT `exp`.
@@ -147,6 +152,9 @@ Fix applied:
 - Frontend: `npm.cmd run build` passing.
 - UC-3.1 frontend: `npm.cmd run build` passed after Calendar and Resolution Center implementation.
 - UC-3.1 frontend: targeted ESLint passed for `src/features/calendar`, `src/features/resolution`, `src/hooks/useCalendarEvents.ts`, `src/hooks/useResolutionFailures.ts`, `src/api/calendarApi.ts`, and `src/api/resolutionApi.ts`.
+- Submit Content / Facebook Preview: `npm.cmd run build` passed after dynamic preview, preview modal, carousel, and media reorder implementation.
+- Submit Content / Facebook Preview: targeted ESLint passed for `src/features/submission/SubmissionScreen.tsx`, `src/components/facebook`, `src/hooks/useFacebookPreviewData.ts`, `src/hooks/useMediaReorder.ts`, and `src/types/facebook.ts`.
+- Submission media reorder backend: `.\mvnw.cmd "-Dtest=SubmissionServiceTest,SubmissionControllerTest" test` passed with 29 focused tests after adding the reorder service test.
 - Full-project `npm.cmd run lint` still fails due pre-existing lint debt in older files outside the UC-3.1 frontend slice.
 - Vite dev server started locally on `http://127.0.0.1:5176/` because ports 5173-5175 were occupied.
 - Migration sanity: `mvn clean` and `mvn spring-boot:run` applied V11–V17 successfully on existing Supabase DB.
@@ -207,7 +215,7 @@ Important enum values are lowercase in the database, including roles and statuse
 | `feat/m4-institution-scheduling`  | Merged                   | Institution management, guard rails, slot reservation, provisioning                                                                                                                 |
 | `dev`                             | In progress              | UC-1.2 extension, conditional bean fix, merged foundation work                                                                                                                      |
 | `feature/uc13-submission-backend` | Done locally, not merged | UC-1.3 backend, required tests, frontend API wiring, reset password/session/dashboard fixes, pending invite/user management UI, invite token superseding, Flyway V4 media migration |
-| `module3`                         | Done locally, not merged | UC-3.1 backend + frontend: publishing pipeline, calendar API/UI, Facebook Graph API integration, token encryption, scheduler jobs, Resolution Center backend/UI (UC-3.4). 208 backend tests passing; frontend build passing. |
+| `module3`                         | Done locally, not merged | UC-3.1 backend + frontend: publishing pipeline, calendar API/UI, Facebook Graph API integration, token encryption, scheduler jobs, Resolution Center backend/UI (UC-3.4), dynamic Facebook Preview modal, media carousel, and persisted submission media reordering. 208 backend tests passing for UC-3.1 baseline; focused submission reorder tests passing; frontend build passing. |
 | UC-2.x                            | Not started              | Validation, media repository, notifications, analytics                                                                                                                              |
 | UC-3.2 / UC-3.3                   | Not started              | AI Caption (Claude Vision), AI Classification & Recommendation (Voyage AI)                                                                                                          |
 
@@ -224,6 +232,7 @@ See `TASKS.md` for the detailed task checklist and current gaps.
 - `BackendApplication` custom Flyway/diagnostic beans are gated by `spring.flyway.enabled`; tests depend on this isolation.
 - `MediaAsset.embedding` is not Hibernate-mapped because pgvector `VECTOR(1024)` is handled through native queries.
 - Media upload is direct-to-Supabase from the frontend, followed by backend metadata attach. The backend does not receive multipart file bytes for Module 1.
+- Submission media ordering is controlled by `submission_media_assets.display_order`; publishing queries already load assets ordered by this field. Use `PATCH /api/v1/submissions/{id}/media/order` for saved draft media reorder instead of mutating media asset records.
 - Fresh Supabase `public` schemas should baseline Flyway at version `0`, not `1`; otherwise V1 is skipped and Module 1 tables are never created.
 - Invitation links are treated as superseded when a fresh invite/resend is issued for the same email; do not leave multiple open invite links for one pending account.
 - The frontend should display institution names from `GET /api/v1/me`; email-domain guessing is only a fallback.

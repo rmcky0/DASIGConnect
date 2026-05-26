@@ -1,9 +1,12 @@
 package com.dasigconnect.backend.service;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +31,7 @@ import com.dasigconnect.backend.model.dto.submission.SignedUploadUrlRequest;
 import com.dasigconnect.backend.model.dto.submission.SignedUploadUrlResponse;
 import com.dasigconnect.backend.model.dto.submission.SlotEvaluateRequestDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionCreateDto;
+import com.dasigconnect.backend.model.dto.submission.SubmissionMediaOrderDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionResponseDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionSummaryDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionUpdateDto;
@@ -395,6 +399,44 @@ public class SubmissionService {
 
         log.info("Existing asset {} attached to submission {} by contributor {}", asset.getId(), submissionId, user.userId());
         return buildResponse(submissionRepository.findById(submissionId).orElseThrow());
+    }
+
+    /**
+     * Updates the posting sequence for media already attached to an editable
+     * submission. The request must include every attached media asset exactly
+     * once so reordering cannot accidentally drop an asset.
+     */
+    public SubmissionResponseDto reorderMedia(UUID submissionId, SubmissionMediaOrderDto dto, JwtUserDetails user) {
+        Submission submission = loadForContributor(submissionId, user);
+        assertEditableStatus(submission);
+
+        List<SubmissionMediaAsset> links =
+                submissionMediaAssetRepository.findBySubmissionIdOrderByDisplayOrderAsc(submissionId);
+        if (links.size() != dto.getMediaAssetIds().size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "mediaAssetIds must include every attached media asset exactly once.");
+        }
+
+        HashSet<UUID> requestedIds = new HashSet<>(dto.getMediaAssetIds());
+        if (requestedIds.size() != dto.getMediaAssetIds().size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "mediaAssetIds must not contain duplicates.");
+        }
+
+        Map<UUID, SubmissionMediaAsset> linksByAssetId = links.stream()
+                .collect(Collectors.toMap(link -> link.getMediaAsset().getId(), Function.identity()));
+        if (!linksByAssetId.keySet().equals(requestedIds)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "mediaAssetIds must match the media currently attached to this submission.");
+        }
+
+        for (int index = 0; index < dto.getMediaAssetIds().size(); index++) {
+            linksByAssetId.get(dto.getMediaAssetIds().get(index)).setDisplayOrder(index);
+        }
+        submissionMediaAssetRepository.saveAll(links);
+
+        log.info("Contributor {} reordered media for submission {}", user.userId(), submissionId);
+        return buildResponse(submission);
     }
 
     // ── UC-3.1 Admin Reschedule ───────────────────────────────────────────────

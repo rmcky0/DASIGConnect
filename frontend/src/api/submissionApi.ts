@@ -100,6 +100,12 @@ export function deleteDraft(id: string) {
   return api.delete<void>(`/submissions/${id}`);
 }
 
+export function reorderSubmissionMedia(id: string, mediaAssetIds: string[]) {
+  return api.patch<SubmissionSummary>(`/submissions/${id}/media/order`, {
+    mediaAssetIds,
+  });
+}
+
 export async function uploadSubmissionMedia(id: string, files: File[]) {
   const responses = [];
   for (const file of files) {

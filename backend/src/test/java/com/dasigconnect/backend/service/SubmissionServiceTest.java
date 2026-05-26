@@ -6,6 +6,7 @@ import com.dasigconnect.backend.model.dto.submission.AttachAssetDto;
 import com.dasigconnect.backend.model.dto.submission.AttachMediaDto;
 import com.dasigconnect.backend.model.dto.submission.SlotEvaluateRequestDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionCreateDto;
+import com.dasigconnect.backend.model.dto.submission.SubmissionMediaOrderDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionResponseDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionSummaryDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionUpdateDto;
@@ -334,6 +335,30 @@ class SubmissionServiceTest {
                 .isEqualTo(HttpStatus.FORBIDDEN);
     }
 
+    @Test
+    void reorderMedia_updatesDisplayOrder() {
+        UUID submissionId = UUID.randomUUID();
+        UUID firstAssetId = UUID.randomUUID();
+        UUID secondAssetId = UUID.randomUUID();
+        Submission submission = submission(submissionId, SubmissionStatus.draft, Instant.now());
+        SubmissionMediaAsset firstLink = mediaLink(submission, mediaAsset(firstAssetId, institution), 0);
+        SubmissionMediaAsset secondLink = mediaLink(submission, mediaAsset(secondAssetId, institution), 1);
+        SubmissionMediaOrderDto dto = new SubmissionMediaOrderDto();
+        dto.setMediaAssetIds(List.of(secondAssetId, firstAssetId));
+
+        when(submissionRepository.findById(submissionId)).thenReturn(Optional.of(submission));
+        when(submissionMediaAssetRepository.findBySubmissionIdOrderByDisplayOrderAsc(submissionId))
+                .thenReturn(List.of(firstLink, secondLink))
+                .thenReturn(List.of(secondLink, firstLink));
+
+        SubmissionResponseDto result = submissionService.reorderMedia(submissionId, dto, contributorPrincipal);
+
+        assertThat(result.getId()).isEqualTo(submissionId);
+        assertThat(secondLink.getDisplayOrder()).isZero();
+        assertThat(firstLink.getDisplayOrder()).isEqualTo(1);
+        verify(submissionMediaAssetRepository).saveAll(List.of(firstLink, secondLink));
+    }
+
     private SubmissionCreateDto createDto(Instant scheduledAt) {
         SubmissionCreateDto dto = new SubmissionCreateDto();
         dto.setEventTitle("Research Expo");
@@ -383,6 +408,17 @@ class SubmissionServiceTest {
         asset.setFileType(MediaFileType.jpeg);
         asset.setFileSizeBytes(1024L);
         return asset;
+    }
+
+    private static SubmissionMediaAsset mediaLink(
+            Submission submission,
+            MediaAsset mediaAsset,
+            int displayOrder) {
+        SubmissionMediaAsset link = new SubmissionMediaAsset();
+        link.setSubmission(submission);
+        link.setMediaAsset(mediaAsset);
+        link.setDisplayOrder(displayOrder);
+        return link;
     }
 
     private static Institution institution(UUID id) {

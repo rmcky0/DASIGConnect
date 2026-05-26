@@ -135,11 +135,16 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: delete wired to `DELETE /api/v1/submissions/{id}`.
 - Done: guard rail panel wired to `POST /api/v1/submissions/{id}/evaluate-slot`.
 - Done: media upload now follows the backend contract: direct Supabase Storage upload, then metadata attach to `POST /api/v1/submissions/{id}/media`.
+- Done: media order can now be updated through `PATCH /api/v1/submissions/{id}/media/order`; backend persists `submission_media_assets.display_order` for editable submissions.
 - Done: backend lookup shape wired for allowed file types, file size, media count, and schedule windows.
 - Done locally: `.jpg` uploads are normalized to backend-supported `jpeg`.
 - Done locally: submission queue has been restyled into a clearer left-side queue panel with count, stronger item containers, active state, and improved spacing.
 - Done locally: submit buttons are not disabled by readiness score during testing.
 - Done: save draft and submit-for-review browser flow verified end-to-end against the active backend/Supabase environment (2026-05-26).
+- Done: Facebook Preview on Submit Content is dynamic and componentized; it uses live form/draft media, caption, page fallback, and schedule data with empty/error-safe states.
+- Done: Facebook Preview card is clickable and opens a responsive preview/review modal with larger post preview, submission details, missing-field messaging, and Save Draft / Submit for Review / Edit Details actions wired to existing handlers.
+- Done: Facebook Preview media supports carousel review in compact and modal preview; modal includes draggable thumbnail reordering plus keyboard-friendly move controls.
+- Done: reordered media updates the actual submission order. Local files are uploaded in reordered sequence, saved draft media persists through `PATCH /api/v1/submissions/{id}/media/order`, and the first reordered item becomes the first Facebook Preview media.
 
 ### Dashboard
 
@@ -173,6 +178,9 @@ Legend: Done / In Progress / Not Started / Deferred
 ### Frontend Verification
 
 - Done: `npm.cmd run build` passed.
+- Done: Submit Content / Facebook Preview build verification passed after dynamic preview, preview modal, carousel, and media reorder implementation.
+- Done: targeted ESLint passed for Submit Content / Facebook Preview files: `SubmissionScreen.tsx`, `components/facebook`, `useFacebookPreviewData.ts`, `useMediaReorder.ts`, and `types/facebook.ts`.
+- Done: focused backend tests passed for submission controller/service after adding media reorder support: `.\mvnw.cmd "-Dtest=SubmissionServiceTest,SubmissionControllerTest" test` (29 tests passing).
 - Done: UC-3.1 frontend build verification passed after Calendar and Resolution Center wiring.
 - Done: targeted ESLint passed for new/changed Calendar, Resolution Center, API, and hook files.
 - Note: full-project `npm.cmd run lint` still fails due pre-existing lint debt in older files (`App.tsx`, dashboard, submission, validation, user-management, shared toast/button files); not caused by the UC-3.1 frontend slice.

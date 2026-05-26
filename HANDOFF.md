@@ -88,3 +88,46 @@ A photo post was published to the DasigConnect Facebook Page from a scheduled su
 - `BackendApplication.flyway()` calls `repair()` + `migrate()`. Never add `outOfOrder=true` or `validateOnMigrate=false` — fix history issues by renumbering migration files.
 - V4 creates `asset_tags(asset_id, tag, source)`. V17 drops and recreates it. Do not revert V17.
 - T1 notifications in `SubmissionService.submit()` are wrapped in try-catch by design — do not remove this guard.
+## Update - Facebook Preview Media Ordering (2026-05-26)
+
+### What Was Done
+
+- Removed hardcoded Facebook Preview content from Submit Content and replaced it with reusable dynamic preview components.
+- Added a clickable sidebar Facebook Preview card that opens a responsive preview/review modal.
+- Added `FacebookPreviewMediaCarousel` for arrow navigation, swipe gestures, index counter, and dots in compact and modal preview contexts.
+- Added `FacebookPreviewMediaReorder` in the modal with draggable thumbnails and keyboard-friendly left/right move buttons.
+- Reordered media updates the actual form/submission order. The first reordered media item becomes the main preview media.
+- Local uploaded files are uploaded in reordered sequence on save/submit.
+- Saved draft media order persists through `PATCH /api/v1/submissions/{id}/media/order`.
+- Backend updates `submission_media_assets.display_order` for editable submissions only (`draft`, `needs_revision`).
+- `PublishingQueryService` already loads assets by `display_order`, so publishing follows the reordered sequence.
+
+### Files Added / Changed
+
+- Frontend:
+  - `frontend/src/components/facebook/*`
+  - `frontend/src/hooks/useFacebookPreviewData.ts`
+  - `frontend/src/hooks/useMediaReorder.ts`
+  - `frontend/src/types/facebook.ts`
+  - `frontend/src/features/submission/SubmissionScreen.tsx`
+  - `frontend/src/api/submissionApi.ts`
+  - `frontend/src/styles/submission.css`
+- Backend:
+  - `SubmissionMediaOrderDto`
+  - `SubmissionController.reorderMedia`
+  - `SubmissionService.reorderMedia`
+  - `SubmissionServiceTest.reorderMedia_updatesDisplayOrder`
+
+### Verification
+
+- Frontend build passed: `npm.cmd run build`.
+- Targeted frontend lint passed for Submit Content / Facebook Preview files.
+- Backend focused tests passed: `.\mvnw.cmd "-Dtest=SubmissionServiceTest,SubmissionControllerTest" test` (29 tests passing).
+
+### Remaining Manual Check
+
+- Upload multiple real photos/videos, reorder in the modal, save/reload draft, and submit to confirm the saved media sequence in live data.
+
+### New Invariant
+
+- Media ordering must go through `submission_media_assets.display_order`; do not sort by upload time in publishing or preview paths when an explicit order exists.
