@@ -27,6 +27,21 @@ export function formatDateRange(start: string, end: string) {
   })}`;
 }
 
+export function formatDateTime(value: string) {
+  return new Date(value).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function formatDelta(value: number | null) {
+  if (value === null) return "No comparison";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)}% vs previous period`;
+}
+
 export function clampPercent(value: number) {
   return Math.max(0, Math.min(100, value));
 }

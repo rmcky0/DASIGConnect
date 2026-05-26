@@ -21,7 +21,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.dasigconnect.backend.config.SecurityConfig;
 import com.dasigconnect.backend.model.dto.analytics.AiPerformanceDto;
+import com.dasigconnect.backend.model.dto.analytics.AdminAnalyticsDto;
 import com.dasigconnect.backend.model.dto.analytics.AnalyticsSummaryDto;
+import com.dasigconnect.backend.model.dto.analytics.ContributorBreakdownDto;
 import com.dasigconnect.backend.model.dto.analytics.KpiMetricDto;
 import com.dasigconnect.backend.model.dto.analytics.OperationalHealthDto;
 import com.dasigconnect.backend.service.JWTService;
@@ -54,7 +56,7 @@ class AnalyticsControllerTest {
     @Test
     @WithMockUser
     void summary_authenticated_returnsAnalyticsPayload() throws Exception {
-        when(metricsAggregatorService.summary(eq("30d"), any())).thenReturn(summaryDto());
+        when(metricsAggregatorService.summary(eq("30d"), any(), any())).thenReturn(summaryDto());
 
         mockMvc.perform(get("/api/v1/analytics/summary"))
                 .andExpect(status().isOk())
@@ -67,7 +69,7 @@ class AnalyticsControllerTest {
     @Test
     @WithMockUser
     void export_authenticated_returnsCsvAttachment() throws Exception {
-        when(metricsAggregatorService.export(eq("posting-delay"), eq("30d"), any()))
+        when(metricsAggregatorService.export(eq("posting-delay"), eq("30d"), any(), any()))
                 .thenReturn(new CsvExport("posting-delay.csv", "\"submission_id\"\r\n\"abc\"\r\n"));
 
         mockMvc.perform(get("/api/v1/analytics/export/posting-delay"))
@@ -81,11 +83,23 @@ class AnalyticsControllerTest {
                 "30d",
                 Instant.parse("2026-05-01T00:00:00Z"),
                 Instant.parse("2026-05-31T00:00:00Z"),
-                new KpiMetricDto("averagePostingDelay", "AVG Posting Delay", 2.5, "days", 8, null, true),
-                new KpiMetricDto("contentCompleteness", "Content Completeness", 96.0, "percent", 25, 95.0, true),
-                new KpiMetricDto("totalPostsPublished", "Total Posts Published", 5, "posts", 5, 4.0, true),
+                Instant.parse("2026-05-31T00:00:00Z"),
+                "administrator",
+                true,
+                null,
                 List.of(),
+                new KpiMetricDto("averagePostingDelay", "AVG Posting Delay", 2.5, "days", 8, null, true, null, List.of(2.0, 2.5), null, null),
+                new KpiMetricDto("contentCompleteness", "Content Completeness", 96.0, "percent", 25, 95.0, true, 2.0, List.of(94.0, 96.0), null, null),
+                new KpiMetricDto("totalPostsPublished", "Total Posts Published", 5, "posts", 5, 4.0, true, 1.0, List.of(4.0, 5.0), "Admin direct posts", 1L),
+                List.of(),
+                List.of(new ContributorBreakdownDto(null, "Contributor", 6, 5, 1, 1, 96.0, 2.5)),
+                List.of(),
+                List.of(),
+                List.of(),
+                null,
+                null,
                 new AiPerformanceDto(0, 0, 0, 0, 0, 0, 0, 0, 0, true),
+                new AdminAnalyticsDto(1, 4, 1),
                 new OperationalHealthDto(12, 0, 0, 0, 0, 20, 19, 95.0, 19, 100.0, 4));
     }
 }

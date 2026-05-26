@@ -13,7 +13,7 @@ export default function PostsByInstitutionChart({ rows }: Props) {
       <div className="analytics-panel-header">
         <div>
           <h2>Posts by Institution</h2>
-          <p>Published, manual, and direct-post volume for the selected period</p>
+          <p>Workflow post volume by institution. Direct posts are shown separately.</p>
         </div>
       </div>
 
@@ -26,10 +26,11 @@ export default function PostsByInstitutionChart({ rows }: Props) {
               <div className="analytics-bar-label">
                 <strong>{row.institutionName}</strong>
                 <span>
-                  {formatNumber(row.automatedPublished)} auto · {formatNumber(row.manualPublished)} manual · {formatNumber(row.adminDirectPosts)} direct
+                  {formatNumber(row.automatedPublished)} auto | {formatNumber(row.manualPublished)} manual |{" "}
+                  {formatNumber(row.adminDirectPosts)} direct
                 </span>
               </div>
-              <div className="analytics-bar-track">
+              <div className="analytics-bar-track" aria-label={`${row.institutionName} workflow posts`}>
                 <span style={{ width: `${(row.totalPublished / max) * 100}%` }} />
               </div>
               <div className="analytics-bar-value">{formatNumber(row.totalPublished)}</div>

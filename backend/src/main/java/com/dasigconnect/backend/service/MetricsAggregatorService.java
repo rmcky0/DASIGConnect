@@ -6,6 +6,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.cache.annotation.Cacheable;
@@ -16,16 +17,23 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.dasigconnect.backend.config.CacheConfig;
 import com.dasigconnect.backend.model.dto.analytics.AiPerformanceDto;
+import com.dasigconnect.backend.model.dto.analytics.AdminAnalyticsDto;
+import com.dasigconnect.backend.model.dto.analytics.AnalyticsReportDto;
 import com.dasigconnect.backend.model.dto.analytics.AnalyticsSummaryDto;
+import com.dasigconnect.backend.model.dto.analytics.ContributorBreakdownDto;
+import com.dasigconnect.backend.model.dto.analytics.ContributorAnalyticsDto;
 import com.dasigconnect.backend.model.dto.analytics.KpiMetricDto;
 import com.dasigconnect.backend.model.dto.analytics.OperationalHealthDto;
+import com.dasigconnect.backend.model.dto.analytics.ValidatorAnalyticsDto;
 import com.dasigconnect.backend.repository.AnalyticsRepository;
 import com.dasigconnect.backend.repository.AnalyticsRepository.AiStats;
 import com.dasigconnect.backend.repository.AnalyticsRepository.AnalyticsScope;
 import com.dasigconnect.backend.repository.AnalyticsRepository.CompletenessStats;
+import com.dasigconnect.backend.repository.AnalyticsRepository.ContributorStats;
 import com.dasigconnect.backend.repository.AnalyticsRepository.OperationalStats;
 import com.dasigconnect.backend.repository.AnalyticsRepository.PostingDelayStats;
 import com.dasigconnect.backend.repository.AnalyticsRepository.PublishedPostStats;
+import com.dasigconnect.backend.repository.AnalyticsRepository.ValidatorStats;
 import com.dasigconnect.backend.security.JwtUserDetails;
 
 @Service
@@ -44,26 +52,87 @@ public class MetricsAggregatorService {
 
     @Cacheable(
             cacheNames = CacheConfig.ANALYTICS_SUMMARY_CACHE,
-            key = "#range + ':' + #user.role() + ':' + #user.userId() + ':' + #user.institutionId()")
-    public AnalyticsSummaryDto summary(String range, JwtUserDetails user) {
+            key = "#range + ':' + #institutionId + ':' + #user.role() + ':' + #user.userId() + ':' + #user.institutionId()")
+    public AnalyticsSummaryDto summary(String range, UUID institutionId, JwtUserDetails user) {
         ReportingPeriod period = resolvePeriod(range);
-        AnalyticsScope scope = scopeFor(user);
+        ReportingPeriod previousPeriod = previousPeriod(period);
+        AnalyticsScope scope = scopeFor(user, institutionId);
+        boolean adminView = "administrator".equals(scope.role());
+        boolean validatorView = "validator".equals(scope.role());
+        boolean contributorView = "contributor".equals(scope.role());
 
         PostingDelayStats delay = analyticsRepository.averagePostingDelay(period.start(), period.end(), scope);
+        PostingDelayStats previousDelay = analyticsRepository.averagePostingDelay(
+                previousPeriod.start(), previousPeriod.end(), scope);
         CompletenessStats completeness = analyticsRepository.contentCompleteness(period.start(), period.end(), scope);
+        CompletenessStats previousCompleteness = analyticsRepository.contentCompleteness(
+                previousPeriod.start(), previousPeriod.end(), scope);
         PublishedPostStats posts = analyticsRepository.publishedPostStats(period.start(), period.end(), scope);
+        PublishedPostStats previousPosts = analyticsRepository.publishedPostStats(
+                previousPeriod.start(), previousPeriod.end(), scope);
         AiStats ai = analyticsRepository.aiPerformance(period.start(), period.end(), scope);
-        OperationalStats operational = analyticsRepository.operationalHealth(
-                period.start(), period.end(), Instant.now(), scope);
 
         double completenessRate = percent(completeness.completeCount(), completeness.totalCount());
+        double previousCompletenessRate = percent(
+                previousCompleteness.completeCount(), previousCompleteness.totalCount());
         double postsPerMonth = postsPerMonth(posts.totalCount(), period.days());
-        double publishingSuccessRate = percent(operational.successCount(), operational.attemptCount());
+        List<ContributorBreakdownDto> contributorBreakdown = validatorView || (adminView && scope.institutionId() != null)
+                ? analyticsRepository.contributorBreakdown(period.start(), period.end(), scope)
+                : List.of();
+        ContributorAnalyticsDto contributorAnalytics = null;
+        ValidatorAnalyticsDto validatorAnalytics = null;
+        AdminAnalyticsDto adminAnalytics = null;
+        OperationalHealthDto operationalHealth = null;
+        if (contributorView) {
+            ContributorStats contributor = analyticsRepository.contributorStats(period.start(), period.end(), scope);
+            contributorAnalytics = new ContributorAnalyticsDto(
+                    contributor.submittedCount(),
+                    contributor.publishedCount(),
+                    contributor.revisionRequestCount(),
+                    contributor.rejectedOrRevisionCount(),
+                    round(percent(contributor.rejectedOrRevisionCount(), contributor.submittedCount())));
+        }
+        if (validatorView) {
+            ValidatorStats validator = analyticsRepository.validatorStats(
+                    period.start(), period.end(), Instant.now(), scope);
+            validatorAnalytics = new ValidatorAnalyticsDto(
+                    validator.submissionVolume(),
+                    validator.pendingCount(),
+                    validator.inReviewCount(),
+                    validator.averageTurnaroundDays(),
+                    validator.queueAgingCount());
+        }
+        if (adminView) {
+            OperationalStats operational = analyticsRepository.operationalHealth(
+                    period.start(), period.end(), Instant.now(), scope);
+            double publishingSuccessRate = percent(operational.successCount(), operational.attemptCount());
+            operationalHealth = new OperationalHealthDto(
+                    operational.workflowCount(),
+                    operational.deadlineRiskCount(),
+                    round(percent(operational.deadlineRiskCount(), operational.workflowCount())),
+                    operational.overrideCount(),
+                    round(percent(operational.overrideCount(), operational.workflowCount())),
+                    operational.attemptCount(),
+                    operational.successCount(),
+                    round(publishingSuccessRate),
+                    operational.onTimeCount(),
+                    round(percent(operational.onTimeCount(), operational.successCount())),
+                    operational.adminActionCount());
+            adminAnalytics = new AdminAnalyticsDto(
+                    Math.max(0, operational.attemptCount() - operational.successCount()),
+                    operational.adminActionCount(),
+                    posts.adminDirectCount());
+        }
 
         return new AnalyticsSummaryDto(
                 period.label(),
                 period.start(),
                 period.end(),
+                Instant.now(),
+                scope.role(),
+                adminView,
+                scope.institutionId(),
+                adminView ? analyticsRepository.institutionFilterOptions() : List.of(),
                 new KpiMetricDto(
                         "averagePostingDelay",
                         "AVG Posting Delay",
@@ -71,7 +140,11 @@ public class MetricsAggregatorService {
                         "days",
                         delay.sampleSize(),
                         null,
-                        true),
+                        true,
+                        deltaPercent(delay.averageDays(), previousDelay.averageDays()),
+                        analyticsRepository.postingDelaySparkline(period.start(), period.end(), scope),
+                        null,
+                        null),
                 new KpiMetricDto(
                         "contentCompleteness",
                         "Content Completeness",
@@ -79,7 +152,11 @@ public class MetricsAggregatorService {
                         "percent",
                         completeness.totalCount(),
                         COMPLETENESS_TARGET,
-                        completenessRate >= COMPLETENESS_TARGET),
+                        completenessRate >= COMPLETENESS_TARGET,
+                        deltaPercent(completenessRate, previousCompletenessRate),
+                        analyticsRepository.completenessSparkline(period.start(), period.end(), scope),
+                        null,
+                        null),
                 new KpiMetricDto(
                         "totalPostsPublished",
                         "Total Posts Published",
@@ -87,31 +164,49 @@ public class MetricsAggregatorService {
                         "posts",
                         posts.totalCount(),
                         POSTS_PER_MONTH_TARGET,
-                        postsPerMonth >= POSTS_PER_MONTH_TARGET),
-                analyticsRepository.postsByInstitution(period.start(), period.end(), scope),
+                        postsPerMonth >= POSTS_PER_MONTH_TARGET,
+                        deltaPercent(posts.totalCount(), previousPosts.totalCount()),
+                        analyticsRepository.publishedPostsSparkline(period.start(), period.end(), scope),
+                        "Admin direct posts",
+                        posts.adminDirectCount()),
+                adminView ? analyticsRepository.postsByInstitution(period.start(), period.end(), scope) : List.of(),
+                contributorBreakdown,
+                analyticsRepository.statusBreakdown(scope),
+                analyticsRepository.contentIssues(period.start(), period.end(), scope),
+                analyticsRepository.topCategories(period.start(), period.end(), scope),
+                contributorAnalytics,
+                validatorAnalytics,
                 aiPerformance(ai),
-                new OperationalHealthDto(
-                        operational.workflowCount(),
-                        operational.deadlineRiskCount(),
-                        round(percent(operational.deadlineRiskCount(), operational.workflowCount())),
-                        operational.overrideCount(),
-                        round(percent(operational.overrideCount(), operational.workflowCount())),
-                        operational.attemptCount(),
-                        operational.successCount(),
-                        round(publishingSuccessRate),
-                        operational.onTimeCount(),
-                        round(percent(operational.onTimeCount(), operational.successCount())),
-                        operational.adminActionCount()));
+                adminAnalytics,
+                operationalHealth);
     }
 
-    public CsvExport export(String metric, String range, JwtUserDetails user) {
+    public CsvExport export(String metric, String range, UUID institutionId, JwtUserDetails user) {
         ReportingPeriod period = resolvePeriod(range);
+        AnalyticsScope scope = scopeFor(user, institutionId);
+        String normalizedMetric = normalizeMetric(metric);
+        assertMetricAllowed(normalizedMetric, scope);
         List<Map<String, Object>> rows = analyticsRepository.exportRows(
-                normalizeMetric(metric),
+                normalizedMetric,
                 period.start(),
                 period.end(),
-                scopeFor(user));
-        return new CsvExport("dasigconnect-" + metric + "-" + period.label() + ".csv", toCsv(rows));
+                scope);
+        return new CsvExport(csvFilename(normalizedMetric, period, scope), toCsv(rows));
+    }
+
+    public AnalyticsReportDto report(String metric, String range, UUID institutionId, JwtUserDetails user) {
+        ReportingPeriod period = resolvePeriod(range);
+        AnalyticsScope scope = scopeFor(user, institutionId);
+        String normalizedMetric = normalizeMetric(metric);
+        assertMetricAllowed(normalizedMetric, scope);
+        return new AnalyticsReportDto(
+                normalizedMetric,
+                period.label(),
+                period.start(),
+                period.end(),
+                analyticsRepository.dailyBreakdown(normalizedMetric, period.start(), period.end(), scope),
+                analyticsRepository.submissionReportRows(period.start(), period.end(), scope),
+                analyticsRepository.exportRows(normalizedMetric, period.start(), period.end(), scope));
     }
 
     private AiPerformanceDto aiPerformance(AiStats ai) {
@@ -129,12 +224,24 @@ public class MetricsAggregatorService {
                 totalEvents < 20);
     }
 
-    private AnalyticsScope scopeFor(JwtUserDetails user) {
+    private AnalyticsScope scopeFor(JwtUserDetails user, UUID institutionId) {
         String role = user.role() == null ? "" : user.role().toLowerCase(Locale.ROOT);
         return switch (role) {
-            case "administrator" -> new AnalyticsScope("administrator", null, null);
-            case "validator" -> new AnalyticsScope("validator", user.institutionId(), null);
-            case "contributor" -> new AnalyticsScope("contributor", user.institutionId(), user.userId());
+            case "administrator" -> new AnalyticsScope("administrator", institutionId, null);
+            case "validator" -> {
+                if (institutionId != null) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Institution analytics filters are available to administrators only.");
+                }
+                yield new AnalyticsScope("validator", user.institutionId(), null);
+            }
+            case "contributor" -> {
+                if (institutionId != null) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Institution analytics filters are available to administrators only.");
+                }
+                yield new AnalyticsScope("contributor", user.institutionId(), user.userId());
+            }
             default -> throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Unsupported analytics role.");
         };
     }
@@ -156,6 +263,20 @@ public class MetricsAggregatorService {
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Unsupported analytics range. Use 7d, 30d, 90d, or ytd.");
         };
+    }
+
+    private ReportingPeriod previousPeriod(ReportingPeriod period) {
+        long seconds = java.time.Duration.between(period.start(), period.end()).getSeconds();
+        if ("ytd".equals(period.label())) {
+            LocalDate today = LocalDate.now(ZoneOffset.UTC);
+            LocalDate previousStart = today.minusYears(1).withDayOfYear(1);
+            LocalDate previousEnd = today.minusYears(1);
+            return new ReportingPeriod(
+                    "previous-ytd",
+                    previousStart.atStartOfDay().toInstant(ZoneOffset.UTC),
+                    previousEnd.atStartOfDay().toInstant(ZoneOffset.UTC));
+        }
+        return new ReportingPeriod("previous-" + period.label(), period.start().minusSeconds(seconds), period.start());
     }
 
     private String normalizeMetric(String metric) {
@@ -200,6 +321,20 @@ public class MetricsAggregatorService {
         return (numerator * 100.0) / denominator;
     }
 
+    private void assertMetricAllowed(String metric, AnalyticsScope scope) {
+        if ("operational-health".equals(metric) && !"administrator".equals(scope.role())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Operational health analytics are available to administrators only.");
+        }
+    }
+
+    private Double deltaPercent(double current, double previous) {
+        if (previous == 0) {
+            return null;
+        }
+        return round(((current - previous) / previous) * 100.0);
+    }
+
     private double postsPerMonth(long posts, long days) {
         if (days <= 0) {
             return 0;
@@ -209,6 +344,21 @@ public class MetricsAggregatorService {
 
     private double round(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private String csvFilename(String metric, ReportingPeriod period, AnalyticsScope scope) {
+        String role = switch (scope.role()) {
+            case "administrator" -> "Administrator";
+            case "validator" -> "Validator";
+            case "contributor" -> "Contributor";
+            default -> "User";
+        };
+        String scopeLabel = "administrator".equals(scope.role()) ? "Network" : "Institution";
+        return "DASIGConnect_Analytics_%s_%s_%s_%s.csv".formatted(
+                role,
+                scopeLabel,
+                metric.replace("-", "_"),
+                period.label().toUpperCase(Locale.ROOT));
     }
 
     public record CsvExport(String filename, String content) {}

@@ -2,13 +2,16 @@ import { useState } from "react";
 import type { User } from "../../types/auth.types";
 import type { AnalyticsExportMetric, AnalyticsRange } from "../../api/analyticsApi";
 import { useAnalyticsSummary } from "./hooks/useAnalyticsSummary";
-import KpiTileGroup from "./components/KpiTileGroup";
-import PostsByInstitutionChart from "./components/PostsByInstitutionChart";
+import AdminAnalyticsPanel from "./components/AdminAnalyticsPanel";
 import AIPerformancePanel from "./components/AIPerformancePanel";
-import OperationalHealthPanel from "./components/OperationalHealthPanel";
-import FullReportModal from "./components/FullReportModal";
+import ContributorAnalyticsView from "./components/ContributorAnalyticsView";
 import ContributorBreakdownTable from "./components/ContributorBreakdownTable";
-import { formatDateRange } from "./analyticsUtils";
+import FullReportModal from "./components/FullReportModal";
+import KpiTileGroup from "./components/KpiTileGroup";
+import OperationalHealthPanel from "./components/OperationalHealthPanel";
+import PostsByInstitutionChart from "./components/PostsByInstitutionChart";
+import ValidatorAnalyticsView from "./components/ValidatorAnalyticsView";
+import { formatDateRange, formatDateTime } from "./analyticsUtils";
 import "../../styles/analytics.css";
 
 interface Props {
@@ -23,9 +26,22 @@ const RANGES: Array<{ value: AnalyticsRange; label: string }> = [
 ];
 
 export default function AnalyticsDashboardPage({ user }: Props) {
-  const { range, setRange, summary, loading, error, refresh } = useAnalyticsSummary("30d");
+  const {
+    range,
+    setRange,
+    institutionId,
+    setInstitutionId,
+    summary,
+    loading,
+    error,
+    refresh,
+  } = useAnalyticsSummary("30d");
   const [reportMetric, setReportMetric] = useState<AnalyticsExportMetric | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
+  const role = summary?.scopeRole ?? user.role;
+  const isAdminView = summary?.adminView ?? (role === "administrator" || role === "admin");
+  const isValidatorView = role === "validator";
+  const isContributorView = role === "contributor";
 
   return (
     <div className="analytics-page" data-role={user.role}>
@@ -36,12 +52,38 @@ export default function AnalyticsDashboardPage({ user }: Props) {
             Posting frequency, completeness, AI adoption, and operational health
           </p>
           {summary && (
-            <span className="analytics-period">
-              {formatDateRange(summary.periodStart, summary.periodEnd)}
-            </span>
+            <div className="analytics-meta-row">
+              <span className="analytics-period">
+                {formatDateRange(summary.periodStart, summary.periodEnd)}
+              </span>
+              <span className="analytics-scope-badge">
+                {summary.adminView
+                  ? summary.selectedInstitutionId ? "Institution filter" : "Network scope"
+                  : isContributorView ? "My submissions" : "Institution scope"}
+              </span>
+              <span className="analytics-period">
+                Last updated {formatDateTime(summary.lastUpdated)}
+              </span>
+            </div>
           )}
         </div>
         <div className="analytics-toolbar">
+          {summary?.adminView && (
+            <label className="analytics-filter">
+              <span>Institution</span>
+              <select
+                value={institutionId ?? ""}
+                onChange={(event) => setInstitutionId(event.target.value || null)}
+              >
+                <option value="">All institutions</option>
+                {summary.institutionFilterOptions.map((item) => (
+                  <option key={item.institutionId} value={item.institutionId}>
+                    {item.institutionName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="analytics-segmented" aria-label="Analytics range">
             {RANGES.map((item) => (
               <button
@@ -76,26 +118,40 @@ export default function AnalyticsDashboardPage({ user }: Props) {
       {!loading && !error && summary && (
         <>
           <KpiTileGroup summary={summary} onOpenReport={setReportMetric} />
-          <div className="analytics-main-grid">
-            <PostsByInstitutionChart rows={summary.postsByInstitution} />
-            <div className="analytics-stack">
-              <AIPerformancePanel
-                data={summary.aiPerformance}
-                onOpenReport={() => setReportMetric("ai-performance")}
-              />
-              <OperationalHealthPanel
-                data={summary.operationalHealth}
-                onOpenReport={() => setReportMetric("operational-health")}
-              />
+          {isContributorView && (
+            <ContributorAnalyticsView summary={summary} onOpenReport={setReportMetric} />
+          )}
+          {isValidatorView && (
+            <ValidatorAnalyticsView summary={summary} onOpenReport={setReportMetric} />
+          )}
+          {isAdminView && (
+            <div className="analytics-main-grid">
+              <PostsByInstitutionChart rows={summary.postsByInstitution} />
+              <div className="analytics-stack">
+                {summary.adminAnalytics && <AdminAnalyticsPanel summary={summary} />}
+                <AIPerformancePanel
+                  data={summary.aiPerformance}
+                  onOpenReport={() => setReportMetric("ai-performance")}
+                />
+                {summary.operationalHealth && (
+                  <OperationalHealthPanel
+                    data={summary.operationalHealth}
+                    onOpenReport={() => setReportMetric("operational-health")}
+                  />
+                )}
+              </div>
             </div>
-          </div>
-          <ContributorBreakdownTable rows={summary.postsByInstitution} />
+          )}
+          {isAdminView && summary.selectedInstitutionId && (
+            <ContributorBreakdownTable rows={summary.contributorBreakdown} />
+          )}
         </>
       )}
 
       <FullReportModal
         metric={reportMetric}
         range={range}
+        institutionId={institutionId}
         busy={exportBusy}
         onBusyChange={setExportBusy}
         onClose={() => setReportMetric(null)}

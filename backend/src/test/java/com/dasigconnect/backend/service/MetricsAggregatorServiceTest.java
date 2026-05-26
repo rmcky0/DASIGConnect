@@ -18,14 +18,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.dasigconnect.backend.model.dto.analytics.InstitutionPostsDto;
+import com.dasigconnect.backend.model.dto.analytics.ContributorBreakdownDto;
 import com.dasigconnect.backend.repository.AnalyticsRepository;
 import com.dasigconnect.backend.repository.AnalyticsRepository.AiStats;
 import com.dasigconnect.backend.repository.AnalyticsRepository.AnalyticsScope;
 import com.dasigconnect.backend.repository.AnalyticsRepository.CompletenessStats;
-import com.dasigconnect.backend.repository.AnalyticsRepository.OperationalStats;
 import com.dasigconnect.backend.repository.AnalyticsRepository.PostingDelayStats;
 import com.dasigconnect.backend.repository.AnalyticsRepository.PublishedPostStats;
+import com.dasigconnect.backend.repository.AnalyticsRepository.ValidatorStats;
 import com.dasigconnect.backend.security.JwtUserDetails;
 
 @ExtendWith(MockitoExtension.class)
@@ -52,25 +52,38 @@ class MetricsAggregatorServiceTest {
                 .thenReturn(new CompletenessStats(19, 20));
         when(analyticsRepository.publishedPostStats(any(), any(), any()))
                 .thenReturn(new PublishedPostStats(4, 3, 1, 0));
-        when(analyticsRepository.postsByInstitution(any(), any(), any()))
-                .thenReturn(List.of(new InstitutionPostsDto(institutionId, "CIT-U", 4, 3, 1, 0)));
+        when(analyticsRepository.contributorBreakdown(any(), any(), any()))
+                .thenReturn(List.of(new ContributorBreakdownDto(UUID.randomUUID(), "Contributor", 5, 4, 1, 1, 95.0, 2.35)));
+        when(analyticsRepository.validatorStats(any(), any(), any(), any()))
+                .thenReturn(new ValidatorStats(5, 2, 1, 1.25, 1));
+        when(analyticsRepository.statusBreakdown(any())).thenReturn(List.of());
+        when(analyticsRepository.contentIssues(any(), any(), any())).thenReturn(List.of());
+        when(analyticsRepository.topCategories(any(), any(), any())).thenReturn(List.of());
+        when(analyticsRepository.postingDelaySparkline(any(), any(), any()))
+                .thenReturn(List.of(2.1, 2.2, 2.35));
+        when(analyticsRepository.completenessSparkline(any(), any(), any()))
+                .thenReturn(List.of(90.0, 95.0, 95.0));
+        when(analyticsRepository.publishedPostsSparkline(any(), any(), any()))
+                .thenReturn(List.of(2.0, 3.0, 4.0));
         when(analyticsRepository.aiPerformance(any(), any(), any()))
                 .thenReturn(new AiStats(10, 7, 4, 1, 8, 6));
-        when(analyticsRepository.operationalHealth(any(), any(), any(), any()))
-                .thenReturn(new OperationalStats(12, 1, 2, 5, 4, 3, 9));
 
-        var summary = service.summary("30d", validator);
+        var summary = service.summary("30d", null, validator);
 
         assertThat(summary.averagePostingDelay().value()).isEqualTo(2.35);
         assertThat(summary.contentCompleteness().value()).isEqualTo(95.0);
         assertThat(summary.contentCompleteness().targetMet()).isTrue();
         assertThat(summary.totalPostsPublished().value()).isEqualTo(4);
+        assertThat(summary.totalPostsPublished().secondaryValue()).isZero();
+        assertThat(summary.totalPostsPublished().sparkline()).containsExactly(2.0, 3.0, 4.0);
         assertThat(summary.aiPerformance().captionAcceptanceRate()).isEqualTo(70.0);
         assertThat(summary.aiPerformance().insufficientData()).isFalse();
-        assertThat(summary.operationalHealth().publishingSuccessRate()).isEqualTo(80.0);
+        assertThat(summary.adminView()).isFalse();
+        assertThat(summary.operationalHealth()).isNull();
+        assertThat(summary.contributorBreakdown()).hasSize(1);
 
         ArgumentCaptor<AnalyticsScope> scopeCaptor = ArgumentCaptor.forClass(AnalyticsScope.class);
-        org.mockito.Mockito.verify(analyticsRepository)
+        org.mockito.Mockito.verify(analyticsRepository, org.mockito.Mockito.atLeastOnce())
                 .averagePostingDelay(any(Instant.class), any(Instant.class), scopeCaptor.capture());
         assertThat(scopeCaptor.getValue().role()).isEqualTo("validator");
         assertThat(scopeCaptor.getValue().institutionId()).isEqualTo(institutionId);
@@ -83,9 +96,9 @@ class MetricsAggregatorServiceTest {
         when(analyticsRepository.exportRows(any(), any(), any(), any()))
                 .thenReturn(List.of(Map.of("metric", "publication_attempts", "value", 5)));
 
-        var export = service.export("operational-health", "7d", admin);
+        var export = service.export("operational-health", "7d", null, admin);
 
-        assertThat(export.filename()).contains("operational-health").endsWith(".csv");
+        assertThat(export.filename()).contains("DASIGConnect_Analytics_Administrator_Network_operational_health_7D").endsWith(".csv");
         assertThat(export.content()).contains("\"metric\",\"value\"");
         assertThat(export.content()).contains("\"publication_attempts\",\"5\"");
     }
@@ -94,7 +107,7 @@ class MetricsAggregatorServiceTest {
     void summary_rejectsUnsupportedRange() {
         JwtUserDetails admin = new JwtUserDetails(UUID.randomUUID(), "admin@test.local", "administrator", null);
 
-        assertThatThrownBy(() -> service.summary("13d", admin))
+        assertThatThrownBy(() -> service.summary("13d", null, admin))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Unsupported analytics range");
     }

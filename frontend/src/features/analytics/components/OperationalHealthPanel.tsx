@@ -16,7 +16,7 @@ export default function OperationalHealthPanel({ data, onOpenReport }: Props) {
     {
       label: "On-time publication",
       value: formatPercent(data.onTimePublicationRate),
-      meta: `${formatNumber(data.onTimePublications)} within ±5 minutes`,
+      meta: `${formatNumber(data.onTimePublications)} within +/-5 minutes`,
     },
     {
       label: "Deadline risk",

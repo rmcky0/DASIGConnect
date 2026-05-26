@@ -7,6 +7,7 @@ import {
 
 export function useAnalyticsSummary(initialRange: AnalyticsRange = "30d") {
   const [range, setRangeValue] = useState<AnalyticsRange>(initialRange);
+  const [institutionId, setInstitutionIdValue] = useState<string | null>(null);
   const [summary, setSummary] = useState<AnalyticsSummaryDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +15,7 @@ export function useAnalyticsSummary(initialRange: AnalyticsRange = "30d") {
 
   useEffect(() => {
     const controller = new AbortController();
-    getAnalyticsSummary(range, controller.signal)
+    getAnalyticsSummary(range, institutionId, controller.signal)
       .then((res) => {
         setSummary(res.data);
         setError(null);
@@ -26,12 +27,25 @@ export function useAnalyticsSummary(initialRange: AnalyticsRange = "30d") {
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [range, refreshKey]);
+  }, [range, institutionId, refreshKey]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setRefreshKey((value) => value + 1);
+    }, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const setRange = useCallback((nextRange: AnalyticsRange) => {
     setLoading(true);
     setError(null);
     setRangeValue(nextRange);
+  }, []);
+
+  const setInstitutionId = useCallback((nextInstitutionId: string | null) => {
+    setLoading(true);
+    setError(null);
+    setInstitutionIdValue(nextInstitutionId);
   }, []);
 
   const refresh = useCallback(() => {
@@ -40,5 +54,5 @@ export function useAnalyticsSummary(initialRange: AnalyticsRange = "30d") {
     setRefreshKey((value) => value + 1);
   }, []);
 
-  return { range, setRange, summary, loading, error, refresh };
+  return { range, setRange, institutionId, setInstitutionId, summary, loading, error, refresh };
 }

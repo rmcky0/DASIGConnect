@@ -94,7 +94,7 @@ React SPA (Vercel) -> Spring Boot REST API (Render) -> Supabase PostgreSQL + pgv
 
 ---
 
-## Current Local Status - 2026-05-27
+## Current Local Status - 2026-05-27 (Session 4)
 
 Current branch: `module3`
 
@@ -201,13 +201,28 @@ Fix applied:
 - **Categories and tags confirmed working** — `GET /api/v1/submissions/lookups` returns both fields and the submission form renders them. Gap note was stale.
 - **Media Library upload guard raised 25 MB → 50 MB** — `MediaRepositoryScreen.tsx` `MAX_UPLOAD_MB` and `UploadModal.tsx` display text updated to align with Supabase free-tier 50 MB global limit. Per-type limits (25 MB image / 500 MB video) require Supabase Pro; code for per-type split was explored but reverted.
 
+### UC-2.4 Role-Scoped Analytics (2026-05-27)
+
+- **Backend implemented locally:** `AnalyticsController`, `MetricsAggregatorService`, `AnalyticsRepository`, and analytics DTOs expose `/api/v1/analytics/summary`, `/report/{metric}`, and `/export/{metric}`. All endpoints accept `range`; admin requests also support optional `institutionId`.
+- **Contributor scope:** own submissions only. Shows own submitted/published posts, average posting delay, completeness, revision/requested-changes count, rejected/needs-revision rate, AI caption usage/acceptance, tag correction rate, top categories, and status breakdown. Do not expose peer names, institution leaderboards, operational health, or network publishing data.
+- **Validator scope:** institution only. Shows institution submission volume, pending/in-review workload, average validation turnaround, contributor breakdown, missing requirements, queue aging, institution-level AI performance, and status/completeness signals. Do not expose other institutions or admin network health.
+- **Admin scope:** network-wide by default with optional institution filter. Shows KPI tiles, institution comparison/filter, workflow posts, admin direct posts, publishing success, validation timeout risk, override rate, admin workload, Facebook/API failures, cross-institution trends, and network AI performance.
+- **Frontend implemented locally:** `/analytics` renders role-specific views from live API data. `FullReportModal` and CSV export pass the same admin institution filter.
+- **Verification:** `.\mvnw.cmd test "-Dtest=MetricsAggregatorServiceTest,AnalyticsControllerTest"` passed. `npm.cmd run build` passed. `npx.cmd eslint src/api/analyticsApi.ts src/features/analytics --quiet` passed. Full-project `npm.cmd run lint` still fails due unrelated pre-existing lint debt outside analytics.
+
+### UC-2.4 Analytics Component Extraction (2026-05-27 Session 4)
+
+- **All 7 role-view components extracted** from `AnalyticsDashboardPage.tsx` into dedicated files under `frontend/src/features/analytics/components/`: `RoleMetricPanel.tsx`, `StatusBreakdownPanel.tsx`, `ContentIssuesPanel.tsx`, `CategoryPerformancePanel.tsx`, `ContributorAnalyticsView.tsx`, `ValidatorAnalyticsView.tsx`, `AdminAnalyticsPanel.tsx`.
+- **`AnalyticsDashboardPage.tsx` reduced** from 356 lines to ~135 lines; now a pure page-level orchestrator.
+- **Verification:** `npm.cmd run build` passed (209 modules, 0 TypeScript errors). `npx.cmd eslint src/features/analytics --quiet` passed with zero warnings.
+
 ### Known Gaps
 
 - UC-3.1 frontend browser action testing still needs an authenticated admin session and active backend to manually exercise retry, manual publish start, complete, and cancel against live data.
 - Submission queue design needs review with real data and mobile widths.
 - Submission lookups do not return preferred time slots (not yet required for current scope). Categories and tags are working.
 - UC-2.2 Media Repository: mp4 uploads require Supabase `dasigconnect-media` bucket to allow `video/*` MIME types and max file size set to 50 MB in dashboard settings.
-- Analytics need UC-2.4 backend.
+- UC-2.4 Analytics component extraction is done. Browser review with contributor, validator, and admin accounts against a running backend is still needed.
 - UC-3.2 AI caption requires a backend restart to activate all Java changes. `DASIG_SUPABASE_SERVICE_ROLE_KEY` is already wired. Browser end-to-end test pending (test both instruction path and draft-refine path).
 - AI classification/recommendation (UC-3.3) not started.
 - No built-in validator account exists. Use the administrator dashboard to invite validators.
@@ -255,9 +270,9 @@ Important enum values are lowercase in the database, including roles and statuse
 | `feat/m4-institution-scheduling`  | Merged                   | Institution management, guard rails, slot reservation, provisioning                                                                                                                 |
 | `dev`                             | In progress              | UC-1.2 extension, conditional bean fix, merged foundation work                                                                                                                      |
 | `feature/uc13-submission-backend` | Done locally, not merged | UC-1.3 backend, required tests, frontend API wiring, reset password/session/dashboard fixes, pending invite/user management UI, invite token superseding, Flyway V4 media migration |
-| `module3`                         | Done locally, not merged | UC-3.1 backend + frontend: publishing pipeline, calendar API/UI, Facebook Graph API integration, token encryption, scheduler jobs, Resolution Center backend/UI (UC-3.4), dynamic Facebook Preview modal, media carousel, and persisted submission media reordering. UC-2.2 Media Repository: backend + frontend fully implemented. UC-2.3 Notifications: backend (SSE, T1–T17, deadline job, email log) + frontend (route, hook, components, sidebar badge, CORS fix) fully implemented. 208 backend tests passing; frontend build passing. UC-3.2 AI Caption enhanced: base64 images, 5 MB resize, existingCaption context, inline button redesign (`AiCaptionButton`, `AiCaptionSuggestion`, `useAiCaptionAssist`), caption counter bottom-right, hover-delete on filmstrip assets. `buildPrompt()` updated with instruction-vs-draft intent detection so Claude follows user directives typed in the caption field. Media Library upload guard raised 25 MB → 50 MB (Supabase free-tier limit). |
+| `module3`                         | Done locally, not merged | UC-3.1 backend + frontend: publishing pipeline, calendar API/UI, Facebook Graph API integration, token encryption, scheduler jobs, Resolution Center backend/UI (UC-3.4), dynamic Facebook Preview modal, media carousel, and persisted submission media reordering. UC-2.2 Media Repository: backend + frontend fully implemented. UC-2.3 Notifications: backend (SSE, T1–T17, deadline job, email log) + frontend (route, hook, components, sidebar badge, CORS fix) fully implemented. UC-2.4 Analytics backend + frontend implemented with role-scoped contributor/validator/admin analytics, admin institution filtering, full reports, and CSV export. 208 backend tests passing; analytics focused backend tests passing; frontend build passing. UC-3.2 AI Caption enhanced: base64 images, 5 MB resize, existingCaption context, inline button redesign (`AiCaptionButton`, `AiCaptionSuggestion`, `useAiCaptionAssist`), caption counter bottom-right, hover-delete on filmstrip assets. `buildPrompt()` updated with instruction-vs-draft intent detection so Claude follows user directives typed in the caption field. Media Library upload guard raised 25 MB → 50 MB (Supabase free-tier limit). |
 | UC-2.1                            | Done locally, not merged | Content validation — `ValidationController`, `ValidationService`, `ReviewLockService`, `ReviewLockCleanupJob`, entities (`ReviewLock`, `ValidationLog`, `ValidationAction`), V10 migration, frontend `ValidationQueueScreen` + `useValidationQueue` + `validationApi` |
-| UC-2.4                            | Not started              | Analytics Dashboard — aggregate endpoints + frontend charts                                                                                                                         |
+| UC-2.4                            | Done locally, needs browser test | Analytics Dashboard — role-scoped backend summary/report/export endpoints plus frontend role views. All 7 role-view components extracted into dedicated files (`ContributorAnalyticsView`, `ValidatorAnalyticsView`, `AdminAnalyticsPanel`, `RoleMetricPanel`, `StatusBreakdownPanel`, `ContentIssuesPanel`, `CategoryPerformancePanel`). Remaining gap: browser-test contributor/validator/admin accounts against live backend. |
 | UC-3.2 / UC-3.3                   | Not started              | AI Caption (Claude Vision), AI Classification & Recommendation (Voyage AI)                                                                                                          |
 
 See `TASKS.md` for the detailed task checklist and current gaps.
