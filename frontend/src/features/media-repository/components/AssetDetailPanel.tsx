@@ -7,7 +7,6 @@ interface AssetDetailPanelProps {
   open: boolean;
   isAdmin: boolean;
   onClose: () => void;
-  onTitleChange: (title: string) => void;
   onUseInNewPost: () => void;
   onAddToDraft: () => void;
   onDownload: () => void;
@@ -41,7 +40,6 @@ export default function AssetDetailPanel({
   open,
   isAdmin,
   onClose,
-  onTitleChange,
   onUseInNewPost,
   onAddToDraft,
   onDownload,
@@ -93,12 +91,9 @@ export default function AssetDetailPanel({
                 </svg>
                 {asset.code}
               </span>
-              <input
-                className="med-editable-title"
-                value={asset.title}
-                onChange={(e) => onTitleChange(e.target.value)}
-                title="Click to edit title"
-              />
+              <div className="med-editable-title" title={asset.title}>
+                {asset.title}
+              </div>
             </div>
 
             {/* Metadata */}

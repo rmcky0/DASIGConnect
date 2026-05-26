@@ -12,6 +12,7 @@ export interface MediaUsage {
   submissionTitle: string;
   submittedAt: string;
   submissionStatus: string;
+  deepLink?: string;
 }
 
 export interface MediaAsset {
@@ -97,20 +98,71 @@ export function listMediaAssets(params?: { networkView?: boolean }, signal?: Abo
     }));
 }
 
+interface MediaAssetDetailResponse {
+  id: string;
+  assetCode: string;
+  storageUrl: string;
+  fileName: string;
+  fileType: string;
+  fileSizeBytes: number;
+  aiCategory?: string | null;
+  aiConfidence?: number | null;
+  createdAt: string;
+  uploaderEmail?: string | null;
+  usedIn?: Array<{
+    submissionId: string;
+    eventTitle: string;
+    submittedAt: string;
+    status: string;
+    deepLink?: string;
+  }>;
+  tags?: Array<{ id: string; label: string }>;
+}
+
+function mapDetailToAsset(raw: MediaAssetDetailResponse): MediaAsset {
+  const aiTags: AiTag[] = [];
+  if (raw.aiCategory) {
+    aiTags.push({
+      label: raw.aiCategory,
+      confidence: raw.aiConfidence != null ? Math.round(Number(raw.aiConfidence) * 100) : 100,
+    });
+  }
+  for (const tag of raw.tags ?? []) {
+    if (!aiTags.some((t) => t.label === tag.label)) {
+      aiTags.push({ label: tag.label, confidence: 100 });
+    }
+  }
+  return {
+    id: raw.id,
+    code: raw.assetCode,
+    title: raw.fileName,
+    fileName: raw.fileName,
+    fileType: raw.fileType,
+    fileSizeBytes: raw.fileSizeBytes,
+    storageUrl: raw.storageUrl,
+    institutionId: "",
+    uploaderName: raw.uploaderEmail ?? undefined,
+    uploadedAt: raw.createdAt,
+    status: "ready",
+    aiTags: aiTags.length > 0 ? aiTags : undefined,
+    usedIn: (raw.usedIn ?? []).map((u) => ({
+      submissionId: u.submissionId,
+      submissionTitle: u.eventTitle,
+      submittedAt: u.submittedAt,
+      submissionStatus: u.status,
+      deepLink: u.deepLink,
+    })),
+  };
+}
+
 export function getMediaAsset(id: string, signal?: AbortSignal) {
-  return api.get<MediaAsset>(`/media-assets/${id}`, { signal });
+  return api
+    .get<MediaAssetDetailResponse>(`/media-assets/${id}`, { signal })
+    .then((res) => ({ ...res, data: mapDetailToAsset(res.data) }));
 }
 
-export function updateMediaAssetTitle(id: string, title: string) {
-  return api.patch<MediaAsset>(`/media-assets/${id}`, { title });
-}
-
-export function checkMediaAssetDeletion(id: string, signal?: AbortSignal) {
-  return api.get<DeleteCheckResult>(`/media-assets/${id}/delete-check`, { signal });
-}
-
-export function deleteMediaAsset(id: string) {
-  return api.delete<void>(`/media-assets/${id}`);
+export function deleteMediaAsset(id: string, force = false) {
+  return api.delete<void>(`/media-assets/${id}`, { params: force ? { force: true } : undefined });
 }
 
 export function getMediaAssetUploadUrl(payload: MediaAssetUploadUrlRequest) {

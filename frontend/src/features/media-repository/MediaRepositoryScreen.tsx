@@ -4,6 +4,7 @@ import type { User } from "../../types/auth.types";
 import type { MediaAsset, MediaUsage } from "../../api/mediaApi";
 import {
   deleteMediaAsset,
+  getMediaAsset,
   getMediaAssetUploadUrl,
   registerMediaAsset,
 } from "../../api/mediaApi";
@@ -94,6 +95,9 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
   function openAsset(asset: MediaAsset) {
     setSelectedAsset(asset);
     setPanelOpen(true);
+    getMediaAsset(asset.id)
+      .then((res) => setSelectedAsset(res.data))
+      .catch(() => { /* panel stays with summary data on fetch error */ });
   }
 
   function closePanel() {
@@ -116,12 +120,6 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
       next.delete(tag);
       return next;
     });
-  }
-
-  function handleTitleChange(title: string) {
-    if (!selectedAsset) return;
-    setSelectedAsset({ ...selectedAsset, title });
-    setAssets((prev) => prev.map((a) => (a.id === selectedAsset.id ? { ...a, title } : a)));
   }
 
   async function handleUpload(file: File) {
@@ -183,7 +181,7 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
     if (!deleteAsset) return;
     setDeleting(true);
     try {
-      await deleteMediaAsset(deleteAsset.id);
+      await deleteMediaAsset(deleteAsset.id, deleteTier === "warning");
       setAssets((prev) => prev.filter((a) => a.id !== deleteAsset.id));
       if (selectedAsset?.id === deleteAsset.id) closePanel();
       setDeleteOpen(false);
@@ -315,7 +313,6 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
         open={panelOpen}
         isAdmin={isAdmin}
         onClose={closePanel}
-        onTitleChange={handleTitleChange}
         onUseInNewPost={() => {
           toast.success("Opening submission form with this asset pre-loaded…");
           navigate("/submissions/new");
