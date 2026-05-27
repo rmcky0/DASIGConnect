@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import {
   createDraft,
@@ -40,8 +46,20 @@ interface FormState {
 }
 
 type QueueFilter = "drafts" | "submitted" | "all";
-type ModalState = "submit" | "success" | "delete" | null;
+type ModalState =
+  | "submit"
+  | "success"
+  | "delete"
+  | "draft-choice"
+  | "draft-exit"
+  | null;
 type SaveState = "idle" | "saving" | "saved";
+type ProgressStep = "media" | "details" | "schedule";
+type SubmitBlocker = {
+  label: string;
+  step: ProgressStep;
+};
+type PopoverPlacement = "drop-down" | "drop-up";
 
 const initialForm: FormState = {
   id: null,
@@ -86,8 +104,16 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [modal, setModal] = useState<ModalState>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [hydratingId, setHydratingId] = useState<string | null>(null);
+  const [refreshingQueue, setRefreshingQueue] = useState(false);
+  const [guardRailsLoading, setGuardRailsLoading] = useState(false);
   const [guardRails, setGuardRails] = useState<GuardRailResult | null>(null);
   const [guardRailError, setGuardRailError] = useState("");
+  const [activeStep, setActiveStep] = useState<ProgressStep>("media");
+  const [selectedStatus, setSelectedStatus] = useState<SubmissionStatus | null>(
+    null,
+  );
 
   const queued = useMemo(() => {
     if (filter === "drafts")
@@ -121,14 +147,53 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const previewCaption =
     form.caption.trim() ||
     "Your caption preview will appear here as you write.";
+  const hasMedia = form.savedAssets.length > 0 || form.files.length > 0;
+  const isReadOnlySubmission = selectedStatus !== null && selectedStatus !== "draft";
+  const busy = saveState === "saving" || submitting || deleting;
+  const submitBlockers = useMemo(
+    () =>
+      getSubmitBlockers(
+        form,
+        scheduledAt,
+        lookups.allowedFileTypes,
+        lookups.maxFileSizeMb,
+      ),
+    [form, lookups.allowedFileTypes, lookups.maxFileSizeMb, scheduledAt],
+  );
+
+  const progressSteps = useMemo(
+    () => [
+      {
+        id: "media" as const,
+        label: "Media Assets",
+        complete: hasMedia,
+      },
+      {
+        id: "details" as const,
+        label: "Post Details",
+        complete:
+          Boolean(form.eventTitle.trim()) &&
+          Boolean(form.eventDate) &&
+          captionTone(form.caption) === "ok",
+      },
+      {
+        id: "schedule" as const,
+        label: "Preferred Schedule",
+        complete: Boolean(scheduledAt),
+      },
+    ],
+    [form.caption, form.eventDate, form.eventTitle, hasMedia, scheduledAt],
+  );
 
   useEffect(() => {
     if (!scheduledAt) {
       setGuardRails(null);
       setGuardRailError("");
+      setGuardRailsLoading(false);
       return;
     }
 
+    setGuardRailsLoading(true);
     const timer = window.setTimeout(() => {
       validateGuardRails(scheduledAt)
         .then((response) => {
@@ -142,7 +207,8 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
               err.message ||
               "Slot validation is unavailable.",
           );
-        });
+        })
+        .finally(() => setGuardRailsLoading(false));
     }, 350);
 
     return () => window.clearTimeout(timer);
@@ -153,7 +219,69 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     setSaveState("idle");
   }
 
+  function resetComposer() {
+    setForm(initialForm);
+    setSelectedFileIndex(0);
+    setGuardRails(null);
+    setGuardRailError("");
+    setSaveState("idle");
+    setFilter("drafts");
+    setActiveStep("media");
+    setSelectedStatus(null);
+  }
+
+  function startNewSubmission() {
+    resetComposer();
+    setModal(null);
+    setActiveStep("media");
+  }
+
+  function handleBack() {
+    if (!isReadOnlySubmission && isDirtyDraft(form)) {
+      setModal("draft-exit");
+      return;
+    }
+    navigate("/dashboard");
+  }
+
+  function handleNewSubmission() {
+    if (isReadOnlySubmission) {
+      startNewSubmission();
+      return;
+    }
+    const existingDraft = submissions.find((item) => item.status === "draft");
+    if (existingDraft || isDirtyDraft(form)) {
+      setModal("draft-choice");
+      return;
+    }
+    startNewSubmission();
+  }
+
+  function resumeExistingDraft() {
+    const existingDraft =
+      submissions.find((item) => item.status === "draft") ||
+      (form.id ? submissions.find((item) => item.id === form.id) : undefined);
+    setFilter("drafts");
+    setModal(null);
+    if (existingDraft) {
+      void applySubmission(existingDraft);
+      return;
+    }
+    setActiveStep("media");
+  }
+
+  async function refreshQueue() {
+    if (refreshingQueue) return;
+    setRefreshingQueue(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshingQueue(false);
+    }
+  }
+
   async function applySubmission(summary: SubmissionSummary) {
+    setHydratingId(summary.id);
     try {
       const { data: submission } = await getSubmission(summary.id);
       setForm({
@@ -173,12 +301,21 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         files: [],
         savedAssets: submission.mediaAssets ?? [],
       });
+      setSelectedStatus(submission.status);
+      setFilter(submission.status === "draft" ? "drafts" : "submitted");
+      setSelectedFileIndex(0);
+      setSaveState("saved");
+      setActiveStep("media");
     } catch {
       toast.error("Could not load submission detail.");
+    } finally {
+      setHydratingId(null);
     }
   }
 
-  async function handleSave() {
+  async function saveDraft() {
+    if (isReadOnlySubmission) return;
+    if (busy) return false;
     setSaveState("saving");
     try {
       const payload = toPayload(form, scheduledAt);
@@ -206,15 +343,91 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       );
       setSaveState("saved");
       toast.success("Draft saved.");
+      return true;
     } catch (err: any) {
       setSaveState("idle");
       toast.error(
         err.response?.data?.error || err.message || "Draft could not be saved.",
       );
+      return false;
     }
   }
 
+  async function handleSave() {
+    await saveDraft();
+  }
+
+  async function handleSaveDraftAndExit() {
+    const saved = await saveDraft();
+    if (saved) {
+      setModal(null);
+      navigate("/dashboard");
+    }
+  }
+
+  async function handleDiscardDraftAndExit() {
+    if (busy) return;
+    setDeleting(true);
+    try {
+      if (form.id) {
+        await deleteDraft(form.id);
+        setSubmissions((current) =>
+          current.filter((item) => item.id !== form.id),
+        );
+      }
+      resetComposer();
+      setModal(null);
+      toast.info("Draft discarded.");
+      navigate("/dashboard");
+    } catch (err: any) {
+      toast.error(
+        err.response?.data?.error ||
+          err.message ||
+          "Draft could not be discarded.",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function requestSubmitReview() {
+    if (isReadOnlySubmission) return;
+    if (busy || hydratingId) return;
+    if (submitBlockers.length > 0) {
+      setActiveStep(submitBlockers[0].step);
+      const visibleBlockers = submitBlockers
+        .slice(0, 3)
+        .map((item) => item.label)
+        .join(", ");
+      const remainder =
+        submitBlockers.length > 3
+          ? ` and ${submitBlockers.length - 3} more`
+          : "";
+      toast.warning(`Complete required items first: ${visibleBlockers}${remainder}.`);
+      return;
+    }
+    setModal("submit");
+  }
+
   async function handleSubmit() {
+    if (isReadOnlySubmission) return;
+    if (busy) return;
+    const blockers = getSubmitBlockers(
+      form,
+      scheduledAt,
+      lookups.allowedFileTypes,
+      lookups.maxFileSizeMb,
+    );
+    if (blockers.length > 0) {
+      setModal(null);
+      setActiveStep(blockers[0].step);
+      toast.warning(
+        `Submission is missing required items: ${blockers
+          .map((item) => item.label)
+          .join(", ")}.`,
+      );
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = toPayload(form, scheduledAt);
@@ -233,7 +446,8 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       }
       const submitted = await submitForReview(draft.data.id);
       setSubmissions((current) => upsertSubmission(current, submitted.data));
-      setForm((current) => ({ ...current, id: submitted.data.id, files: [] }));
+      resetComposer();
+      setFilter("submitted");
       setModal("success");
       toast.success("Submission sent for review.");
       void refresh();
@@ -247,9 +461,13 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   }
 
   async function handleDelete() {
+    if (isReadOnlySubmission) return;
+    if (busy) return;
+    setDeleting(true);
     if (!form.id) {
       setForm(initialForm);
       setModal(null);
+      setDeleting(false);
       return;
     }
 
@@ -267,6 +485,8 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           err.message ||
           "Draft could not be deleted.",
       );
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -287,7 +507,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           <button
             className="sub-back-btn"
             type="button"
-            onClick={() => navigate("/dashboard")}
+            onClick={handleBack}
           >
             <i className="ti ti-arrow-left"></i>
           </button>
@@ -328,6 +548,12 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         </div>
       </nav>
 
+      {(loading || lookupsLoading || hydratingId) && (
+        <div className="sub-route-loader" aria-hidden="true">
+          <span></span>
+        </div>
+      )}
+
       <div className="sub-workspace">
         <aside className="sub-sidebar">
           <div className="sub-sidebar-header">
@@ -336,7 +562,19 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                 <div className="sub-sidebar-eyebrow">Workspace</div>
                 <div className="sub-sidebar-title">Submission Queue</div>
               </div>
-              <div className="sub-sidebar-count">{queued.length}</div>
+              <button
+                className="sub-sidebar-count"
+                type="button"
+                onClick={() => void refreshQueue()}
+                disabled={refreshingQueue || loading}
+                aria-label="Refresh submissions"
+              >
+                {refreshingQueue || loading ? (
+                  <i className="ti ti-loader-2 sub-spin"></i>
+                ) : (
+                  queued.length
+                )}
+              </button>
             </div>
             <div className="sub-sidebar-tabs">
               <button
@@ -344,30 +582,30 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                 type="button"
                 onClick={() => setFilter("drafts")}
               >
-                Drafts {draftCount > 0 && <span>{draftCount}</span>}
+                <span className="sub-stab-label">Drafts</span>
+                <span className="sub-stab-badge">{draftCount}</span>
               </button>
               <button
                 className={`sub-stab ${filter === "submitted" ? "active" : ""}`}
                 type="button"
                 onClick={() => setFilter("submitted")}
               >
-                Submitted {submittedCount > 0 && <span>{submittedCount}</span>}
+                <span className="sub-stab-label">Submitted</span>
+                <span className="sub-stab-badge">{submittedCount}</span>
               </button>
               <button
                 className={`sub-stab ${filter === "all" ? "active" : ""}`}
                 type="button"
                 onClick={() => setFilter("all")}
               >
-                All
+                <span className="sub-stab-label">All</span>
+                <span className="sub-stab-badge">{submissions.length}</span>
               </button>
             </div>
           </div>
           <div className="sub-sidebar-list" aria-label="Submission queue">
             {loading && (
-              <QueueState
-                icon="ti-loader-2 sub-spin"
-                title="Loading submissions"
-              />
+              <QueueSkeleton />
             )}
             {!loading && error && (
               <QueueState
@@ -390,13 +628,15 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                   key={item.id}
                   type="button"
                   onClick={() => void applySubmission(item)}
+                  disabled={Boolean(hydratingId)}
+                  aria-busy={hydratingId === item.id}
                 >
                   <div className="sub-qi-top">
                     <div className="sub-qi-title">
                       {item.eventTitle || "Untitled submission"}
                     </div>
                     <span className={`sub-qi-badge status-${item.status}`}>
-                      {statusLabels[item.status]}
+                      {hydratingId === item.id ? "Loading" : statusLabels[item.status]}
                     </span>
                   </div>
                   <div className="sub-qi-meta">
@@ -422,7 +662,8 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
             <button
               className="sub-btn-new"
               type="button"
-              onClick={() => setForm(initialForm)}
+              onClick={handleNewSubmission}
+              disabled={busy || Boolean(hydratingId)}
             >
               <i className="ti ti-plus"></i> New Submission
             </button>
@@ -430,70 +671,111 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         </aside>
 
         <main className="sub-form-canvas">
+          {hydratingId ? (
+            <SubmissionHydrationSkeleton />
+          ) : (
+            <>
           <div className="sub-form-page-head">
             <div>
-              <h1 className="sub-form-page-title">Submit Content</h1>
+              <h1 className="sub-form-page-title">
+                {isReadOnlySubmission ? "Submitted Preview" : "Submit Content"}
+              </h1>
               <p className="sub-form-page-sub">
-                Prepare event media, caption, tags, and a preferred publishing
-                slot.
+                {isReadOnlySubmission
+                  ? "Preview exactly what was sent for validation."
+                  : "Prepare event media, caption, tags, and a preferred publishing slot."}
               </p>
+              {isReadOnlySubmission && selectedStatus && (
+                <div className="sub-readonly-note">
+                  <i className="ti ti-eye"></i>
+                  Viewing {statusLabels[selectedStatus]} submission
+                </div>
+              )}
             </div>
-            <div className="sub-form-page-actions">
+            {!isReadOnlySubmission && (
+              <div className="sub-form-page-actions">
               <button
-                className="sub-btn-ghost"
+                className="sub-btn-ghost danger"
                 type="button"
                 onClick={() => setModal("delete")}
+                disabled={busy || Boolean(hydratingId) || isReadOnlySubmission}
               >
-                <i className="ti ti-trash"></i> Delete
+                {deleting ? <i className="ti ti-loader-2 sub-spin"></i> : <i className="ti ti-trash"></i>} Delete
               </button>
               <button
-                className="sub-btn-ghost"
+                className="sub-btn-ghost save"
                 type="button"
                 onClick={() => void handleSave()}
+                disabled={busy || Boolean(hydratingId) || isReadOnlySubmission}
               >
-                <i className="ti ti-device-floppy"></i> Save Draft
+                {saveState === "saving" ? <i className="ti ti-loader-2 sub-spin"></i> : <i className="ti ti-device-floppy"></i>} Save Draft
               </button>
               <button
                 className="sub-btn-primary"
                 type="button"
-                onClick={() => setModal("submit")}
+                onClick={requestSubmitReview}
+                disabled={busy || Boolean(hydratingId) || isReadOnlySubmission}
               >
-                <i className="ti ti-send"></i> Submit for Review
+                {submitting ? <i className="ti ti-loader-2 sub-spin"></i> : <i className="ti ti-send"></i>} Submit for Review
               </button>
-            </div>
+              </div>
+            )}
           </div>
 
-          <section className="sub-form-section">
+          {!isReadOnlySubmission && (
+            <StepProgress
+              steps={progressSteps}
+              activeStep={activeStep}
+              onStepClick={setActiveStep}
+            />
+          )}
+
+          <section
+            id="sub-step-media"
+            className={`sub-form-section sub-step-panel ${isReadOnlySubmission || activeStep === "media" ? "active" : ""}`}
+            hidden={!isReadOnlySubmission && activeStep !== "media"}
+          >
             <SectionHead
               icon="ti-photo-up"
               tone="blue"
               title="Media Assets"
-              subtitle="Attach photos or videos from the event."
+              subtitle={
+                isReadOnlySubmission
+                  ? "Media included in the submitted post."
+                  : "Attach photos or videos from the event."
+              }
             />
-            <label className="sub-upload-zone">
-              <input
-                className="sub-file-input"
-                type="file"
-                multiple
-                accept="image/*,video/*"
-                onChange={(event) => handleFiles(event.target.files)}
-              />
-              <div className="sub-upload-icon">
-                <i className="ti ti-cloud-upload"></i>
-              </div>
-              <div className="sub-upload-title">Drop files here or browse</div>
-              <div className="sub-upload-sub">
-                Images and videos are attached to the draft and uploaded when
-                you save.
-              </div>
-              <div className="sub-upload-types">
-                <span>JPG</span>
-                <span>PNG</span>
-                <span>MP4</span>
-                <span>MOV</span>
-              </div>
-            </label>
-            {(form.savedAssets.length > 0 || form.files.length > 0) && (
+            {!isReadOnlySubmission && !hasMedia && (
+              <label className="sub-upload-zone">
+                <input
+                  className="sub-file-input"
+                  type="file"
+                  multiple
+                  accept="image/*,video/*"
+                  disabled={busy || Boolean(hydratingId)}
+                  onChange={(event) => handleFiles(event.target.files)}
+                />
+                <div className="sub-upload-icon">
+                  <i className="ti ti-cloud-upload"></i>
+                </div>
+                <div>
+                  <div className="sub-upload-title">
+                    Drop files here or browse
+                  </div>
+                  <div className="sub-upload-sub">
+                    Images and videos are attached to the draft and uploaded when
+                    you save.
+                  </div>
+                  <div className="sub-upload-types">
+                    <span>JPG</span>
+                    <span>PNG</span>
+                    <span>MP4</span>
+                    <span>MOV</span>
+                  </div>
+                </div>
+              </label>
+            )}
+            {hasMedia && (
               <div className="sub-filmstrip">
                 {form.savedAssets.map((asset) => (
                   <div className="sub-film-item" key={asset.id}>
@@ -530,10 +812,10 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                     <span className="sub-film-badge">
                       {file.type.startsWith("video/") ? "VIDEO" : "IMAGE"}
                     </span>
-                    <span
-                      className="sub-film-del"
-                      role="button"
-                      tabIndex={0}
+                  <span
+                    className="sub-film-del"
+                    role="button"
+                    tabIndex={0}
                       onClick={(event) => {
                         event.stopPropagation();
                         setForm((current) => ({
@@ -550,19 +832,52 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                 ))}
               </div>
             )}
+            {!isReadOnlySubmission && hasMedia && (
+              <div className="sub-media-add-row">
+                <label className="sub-upload-zone compact">
+                  <input
+                    className="sub-file-input"
+                    type="file"
+                    multiple
+                    accept="image/*,video/*"
+                    disabled={busy || Boolean(hydratingId)}
+                    onChange={(event) => handleFiles(event.target.files)}
+                  />
+                  <div className="sub-upload-icon">
+                    <i className="ti ti-plus"></i>
+                  </div>
+                  <div className="sub-upload-title">Add More Media</div>
+                </label>
+              </div>
+            )}
+            {isReadOnlySubmission && !hasMedia && (
+              <div className="sub-preview-empty">
+                <i className="ti ti-photo-off"></i>
+                No media assets were attached to this submission.
+              </div>
+            )}
           </section>
 
-          <section className="sub-form-section">
+          <section
+            id="sub-step-details"
+            className={`sub-form-section sub-step-panel ${isReadOnlySubmission || activeStep === "details" ? "active" : ""}`}
+            hidden={!isReadOnlySubmission && activeStep !== "details"}
+          >
             <SectionHead
               icon="ti-edit"
               tone="gold"
               title="Post Details"
-              subtitle="Use backend field names for the saved submission draft."
+              subtitle={
+                isReadOnlySubmission
+                  ? "Post information submitted for review."
+                  : "Use backend field names for the saved submission draft."
+              }
             />
             <div className="sub-field-row">
               <Field label="Event Title">
                 <input
                   className="sub-finput"
+                  readOnly={isReadOnlySubmission}
                   value={form.eventTitle}
                   onChange={(event) =>
                     updateField("eventTitle", event.target.value)
@@ -570,35 +885,41 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                 />
               </Field>
               <Field label="Event Date">
-                <input
-                  className="sub-finput"
-                  type="date"
+                <CalendarDateField
                   value={form.eventDate}
-                  onChange={(event) =>
-                    updateField("eventDate", event.target.value)
-                  }
+                  readOnly={isReadOnlySubmission}
+                  placeholder="Select event date"
+                  onChange={(value) => updateField("eventDate", value)}
                 />
               </Field>
             </div>
             <Field
               label="Caption"
-              count={`${form.caption.length} / 500 chars`}
+              count={
+                isReadOnlySubmission
+                  ? undefined
+                  : `${form.caption.length} / 500 chars`
+              }
               tone={captionTone(form.caption)}
             >
               <textarea
                 className={`sub-finput ${captionTone(form.caption)}`}
                 rows={4}
+                readOnly={isReadOnlySubmission}
                 value={form.caption}
                 onChange={(event) => updateField("caption", event.target.value)}
                 placeholder="Write a compelling caption for the DASIG Facebook page..."
               />
-              <div className="sub-finput-hint">
-                Captions between 150-500 characters perform best on Facebook.
-                Include relevant hashtags.
-              </div>
+              {!isReadOnlySubmission && (
+                <div className="sub-finput-hint">
+                  Captions between 150-500 characters perform best on Facebook.
+                  Include relevant hashtags.
+                </div>
+              )}
             </Field>
 
-            <div className="sub-ai-assist">
+            {!isReadOnlySubmission && (
+              <div className="sub-ai-assist">
               <div className="sub-ai-icon">
                 <i className="ti ti-sparkles"></i>
               </div>
@@ -609,26 +930,36 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                   integration for media analysis is available.
                 </div>
               </div>
-            </div>
+              </div>
+            )}
 
             <div className="sub-field-row">
               <Field label="Event Category">
-                <select
-                  className="sub-fselect"
-                  value={form.category}
-                  onChange={(event) =>
-                    updateField("category", event.target.value)
-                  }
-                >
-                  <option value="">
-                    {lookupsLoading ? "Loading..." : "Select a category"}
-                  </option>
-                  {lookups.categories?.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
+                {isReadOnlySubmission ? (
+                  <input
+                    className="sub-finput"
+                    value={form.category || "Uncategorized"}
+                    readOnly
+                  />
+                ) : (
+                  <select
+                    className="sub-fselect"
+                    value={form.category}
+                    disabled={lookupsLoading}
+                    onChange={(event) =>
+                      updateField("category", event.target.value)
+                    }
+                  >
+                    <option value="">
+                      {lookupsLoading ? "Loading..." : "Select a category"}
                     </option>
-                  ))}
-                </select>
+                    {lookups.categories?.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </Field>
               <Field label="Institution Scope">
                 <input className="sub-finput" value={user.inst} readOnly />
@@ -636,18 +967,29 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
             </div>
 
             <Field label="Tags">
-              {lookupsError && (
+              {lookupsError && !isReadOnlySubmission && (
                 <div className="sub-inline-note">
                   Tag options could not be loaded. You can still save and
                   submit.
                 </div>
               )}
               <div className="sub-tag-row">
-                {lookups.availableTags?.map((tag) => (
+                {lookupsLoading && !isReadOnlySubmission &&
+                  Array.from({ length: 5 }).map((_, index) => (
+                    <span className="sub-tag-skeleton sub-shimmer" key={index}></span>
+                  ))}
+                {isReadOnlySubmission &&
+                  form.tags.map((tag) => (
+                    <span className="sub-tag active is-static" key={tag}>
+                      {tag}
+                    </span>
+                  ))}
+                {!isReadOnlySubmission && !lookupsLoading && lookups.availableTags?.map((tag) => (
                   <button
                     key={tag}
                     type="button"
                     className={`sub-tag ${form.tags.includes(tag) ? "active" : ""}`}
+                    disabled={isReadOnlySubmission}
                     onClick={() =>
                       updateField(
                         "tags",
@@ -660,7 +1002,10 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                     {tag}
                   </button>
                 ))}
-                {!lookupsLoading && !lookups.availableTags?.length && (
+                {isReadOnlySubmission && form.tags.length === 0 && (
+                  <span className="sub-muted-text">No tags included.</span>
+                )}
+                {!isReadOnlySubmission && !lookupsLoading && !lookups.availableTags?.length && (
                   <span className="sub-muted-text">No tags available.</span>
                 )}
               </div>
@@ -670,6 +1015,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
               <textarea
                 className="sub-finput"
                 rows={2}
+                readOnly={isReadOnlySubmission}
                 value={form.description}
                 onChange={(event) =>
                   updateField("description", event.target.value)
@@ -679,32 +1025,36 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
             </Field>
           </section>
 
-          <section className="sub-form-section">
+          <section
+            id="sub-step-schedule"
+            className={`sub-form-section sub-step-panel ${isReadOnlySubmission || activeStep === "schedule" ? "active" : ""}`}
+            hidden={!isReadOnlySubmission && activeStep !== "schedule"}
+          >
             <SectionHead
               icon="ti-calendar-event"
               tone="purple"
-              title="Preferred Schedule"
-              subtitle="Testing mode allows draft save and submit while guardrails are being tuned."
+              title={isReadOnlySubmission ? "Submitted Schedule" : "Preferred Schedule"}
+              subtitle={
+                isReadOnlySubmission
+                  ? "Schedule preference included in the submission."
+                  : "Testing mode allows draft save and submit while guardrails are being tuned."
+              }
             />
             <div className="sub-field-row">
               <Field label="Preferred Date">
-                <input
-                  className="sub-finput"
-                  type="date"
+                <CalendarDateField
                   value={form.scheduledDate}
-                  onChange={(event) =>
-                    updateField("scheduledDate", event.target.value)
-                  }
+                  readOnly={isReadOnlySubmission}
+                  placeholder="Select preferred date"
+                  onChange={(value) => updateField("scheduledDate", value)}
                 />
               </Field>
               <Field label="Preferred Time">
-                <input
-                  className="sub-finput"
-                  type="time"
+                <TimePickerField
                   value={form.scheduledTime}
-                  onChange={(event) =>
-                    updateField("scheduledTime", event.target.value)
-                  }
+                  readOnly={isReadOnlySubmission}
+                  placeholder="Select preferred time"
+                  onChange={(value) => updateField("scheduledTime", value)}
                 />
               </Field>
             </div>
@@ -712,17 +1062,34 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
               <div className="sub-inline-error">{guardRailError}</div>
             )}
           </section>
+
+          {!isReadOnlySubmission && (
+            <StepPanelActions activeStep={activeStep} onStepChange={setActiveStep} />
+          )}
+            </>
+          )}
         </main>
 
         <aside className="sub-guard-panel">
-          <div className="sub-guard-header">
-            <div className="sub-guard-title">
-              <i className="ti ti-shield-check"></i> Readiness
+          {isReadOnlySubmission ? (
+            <SubmissionReviewPanel
+              status={selectedStatus}
+              form={form}
+              user={user}
+              scheduledAt={scheduledAt}
+            />
+          ) : lookupsLoading || hydratingId ? (
+            <ReadinessSkeleton />
+          ) : (
+            <div className="sub-guard-header">
+              <div className="sub-guard-title">
+                <i className="ti ti-shield-check"></i> Readiness
+              </div>
+              <ReadinessRing score={readiness.score} />
+              <div className="sub-score-grade">{readiness.grade}</div>
+              <div className="sub-score-desc">{readiness.description}</div>
             </div>
-            <ReadinessRing score={readiness.score} />
-            <div className="sub-score-grade">{readiness.grade}</div>
-            <div className="sub-score-desc">{readiness.description}</div>
-          </div>
+          )}
 
           <GuardSection title="Required Fields" icon="ti-list-check">
             <CheckItem
@@ -749,9 +1116,14 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
 
           <GuardSection title="Media Quality" icon="ti-photo">
             <CheckItem
-              pass={form.files.length > 0 || form.savedAssets.length > 0}
-              title="Minimum 1 file uploaded"
-              sub={`${form.savedAssets.length + form.files.length} file(s) attached`}
+              pass
+              idle={form.files.length === 0 && form.savedAssets.length === 0}
+              title="Media attached"
+              sub={
+                form.files.length === 0 && form.savedAssets.length === 0
+                  ? "Optional for text-only posts"
+                  : `${form.savedAssets.length + form.files.length} file(s) attached`
+              }
             />
             <CheckItem
               pass={form.files.every(
@@ -781,7 +1153,14 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                   : "Select date and time"
               }
             />
-            {guardRails ? (
+            {guardRailsLoading ? (
+              <CheckItem
+                pass
+                idle
+                title="Slot confirmation"
+                sub="Checking preferred schedule..."
+              />
+            ) : guardRails ? (
               <CheckItem
                 pass
                 title="Slot confirmation"
@@ -819,10 +1198,10 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                 </div>
               </div>
               <div className="sub-fb-preview-img">
-                {form.files[selectedFileIndex]?.type.startsWith("image/") ? (
+                {mediaPreviewSrc(form, selectedFileIndex) ? (
                   <img
-                    src={filePreviewUrl(form.files[selectedFileIndex])}
-                    alt={form.files[selectedFileIndex].name}
+                    src={mediaPreviewSrc(form, selectedFileIndex)}
+                    alt="Attached media preview"
                   />
                 ) : (
                   <i className="ti ti-photo"></i>
@@ -836,16 +1215,18 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
             <button
               className="sub-guard-submit-btn"
               type="button"
-              onClick={() => setModal("submit")}
+              onClick={requestSubmitReview}
+              disabled={busy || Boolean(hydratingId) || isReadOnlySubmission}
             >
-              <i className="ti ti-send"></i> Submit for Review
+              {submitting ? <i className="ti ti-loader-2 sub-spin"></i> : <i className="ti ti-send"></i>} Submit for Review
             </button>
             <button
               className="sub-guard-save-btn"
               type="button"
               onClick={() => void handleSave()}
+              disabled={busy || Boolean(hydratingId) || isReadOnlySubmission}
             >
-              <i className="ti ti-device-floppy"></i> Save Draft
+              {saveState === "saving" ? <i className="ti ti-loader-2 sub-spin"></i> : <i className="ti ti-device-floppy"></i>} Save Draft
             </button>
           </div>
         </aside>
@@ -855,9 +1236,11 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         <ConfirmModal
           icon="ti-send"
           title="Submit for Review?"
-          description={`This submission will be sent to your institution's Validator. Testing mode will not block low readiness or guard rail warnings. Readiness score: ${readiness.score} / 100.`}
+          description={`This submission has the required title, event date, caption, and preferred schedule. Media is optional for text-only posts. It will be sent to your institution's Validator. Readiness score: ${readiness.score} / 100.`}
           cancelLabel="Go Back"
-          confirmLabel={submitting ? "Submitting..." : "Confirm Submission"}
+          confirmLabel="Confirm Submission"
+          loading={submitting}
+          disabled={busy}
           onCancel={() => setModal(null)}
           onConfirm={() => void handleSubmit()}
         />
@@ -872,6 +1255,30 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           onConfirm={() => setModal(null)}
         />
       )}
+      {modal === "draft-choice" && (
+        <ConfirmModal
+          icon="ti-pencil"
+          title="You have an unfinished draft"
+          description="Resume the existing draft to keep working, or start a clean submission with empty media, details, schedule, and readiness state."
+          cancelLabel="Resume Existing Draft"
+          confirmLabel="Start New Submission"
+          onCancel={resumeExistingDraft}
+          onConfirm={startNewSubmission}
+        />
+      )}
+      {modal === "draft-exit" && (
+        <ConfirmModal
+          icon="ti-notes"
+          title="You are making a post"
+          description="Do you want to save this post as a draft before leaving, or delete the draft and exit?"
+          cancelLabel={deleting ? "Deleting..." : "Delete Draft"}
+          confirmLabel={saveState === "saving" ? "Saving..." : "Save as Draft"}
+          loading={saveState === "saving"}
+          disabled={busy}
+          onCancel={() => void handleDiscardDraftAndExit()}
+          onConfirm={() => void handleSaveDraftAndExit()}
+        />
+      )}
       {modal === "delete" && (
         <ConfirmModal
           icon="ti-trash"
@@ -879,11 +1286,582 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           title="Delete this draft?"
           description="This will delete the current draft from the submission queue."
           cancelLabel="Cancel"
-          confirmLabel="Delete Draft"
+          confirmLabel={deleting ? "Deleting..." : "Delete Draft"}
+          loading={deleting}
+          disabled={busy}
           onCancel={() => setModal(null)}
           onConfirm={() => void handleDelete()}
         />
       )}
+    </div>
+  );
+}
+
+function StepProgress({
+  steps,
+  activeStep,
+  onStepClick,
+}: {
+  steps: Array<{
+    id: ProgressStep;
+    label: string;
+    complete: boolean;
+  }>;
+  activeStep: ProgressStep;
+  onStepClick: (step: ProgressStep) => void;
+}) {
+  return (
+    <div className="sub-step-nav" aria-label="Submission progress">
+      {steps.map((step, index) => {
+        const active = activeStep === step.id;
+        return (
+          <button
+            key={step.id}
+            className={`sub-step ${active ? "active" : ""} ${step.complete ? "complete" : ""}`}
+            type="button"
+            onClick={() => onStepClick(step.id)}
+            aria-controls={`sub-step-${step.id}`}
+          >
+            <span className="sub-step-circle">
+              {step.complete ? <i className="ti ti-check"></i> : index + 1}
+            </span>
+            <span className="sub-step-text">
+              <span>Step {index + 1}</span>
+              {step.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StepPanelActions({
+  activeStep,
+  onStepChange,
+}: {
+  activeStep: ProgressStep;
+  onStepChange: (step: ProgressStep) => void;
+}) {
+  const order: ProgressStep[] = ["media", "details", "schedule"];
+  const index = order.indexOf(activeStep);
+  const previous = index > 0 ? order[index - 1] : null;
+  const next = index < order.length - 1 ? order[index + 1] : null;
+
+  return (
+    <div className="sub-step-panel-actions">
+      <button
+        type="button"
+        className="sub-step-panel-btn secondary"
+        onClick={() => previous && onStepChange(previous)}
+        disabled={!previous}
+      >
+        <i className="ti ti-arrow-left"></i> Previous
+      </button>
+      {next ? (
+        <button
+          type="button"
+          className="sub-step-panel-btn primary"
+          onClick={() => onStepChange(next)}
+        >
+          Next: {stepLabel(next)} <i className="ti ti-arrow-right"></i>
+        </button>
+      ) : (
+        <span className="sub-step-panel-ready">
+          <i className="ti ti-check"></i> Final step
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CalendarDateField({
+  value,
+  placeholder,
+  readOnly,
+  onChange,
+}: {
+  value: string;
+  placeholder: string;
+  readOnly?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const selectedDate = parseInputDate(value);
+  const [open, setOpen] = useState(false);
+  const { rootRef, popoverRef, placement, maxHeight } =
+    usePopoverCollision(open);
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const base = selectedDate || new Date();
+    return new Date(base.getFullYear(), base.getMonth(), 1);
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (selectedDate) {
+      setVisibleMonth(
+        new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
+      );
+    }
+  }, [value]);
+
+  const days = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
+  const todayValue = dateToInputValue(new Date());
+  const displayValue = selectedDate ? formatLongDate(value) : "";
+
+  function moveMonth(offset: number) {
+    setVisibleMonth(
+      (current) => new Date(current.getFullYear(), current.getMonth() + offset, 1),
+    );
+  }
+
+  function selectDate(next: string) {
+    onChange(next);
+    setOpen(false);
+  }
+
+  return (
+    <div
+      className={`sub-date-field ${open ? "is-open" : ""} ${placement}`}
+      ref={rootRef}
+    >
+      <button
+        className={`sub-date-trigger ${open ? "open" : ""}`}
+        type="button"
+        disabled={readOnly}
+        onClick={() => {
+          if (!readOnly) setOpen((current) => !current);
+        }}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+      >
+        <span className={displayValue ? "" : "placeholder"}>
+          {displayValue || placeholder}
+        </span>
+        <i className="ti ti-calendar-event"></i>
+      </button>
+
+      {open && !readOnly && (
+        <div
+          className="sub-date-popover"
+          ref={popoverRef}
+          role="dialog"
+          aria-label={placeholder}
+          style={{ maxHeight }}
+        >
+          <div className="sub-date-popover-head">
+            <button
+              type="button"
+              className="sub-date-nav"
+              onClick={() => moveMonth(-1)}
+              aria-label="Previous month"
+            >
+              <i className="ti ti-chevron-left"></i>
+            </button>
+            <div>
+              <div className="sub-date-month">
+                {visibleMonth.toLocaleDateString(undefined, {
+                  month: "long",
+                  year: "numeric",
+                })}
+              </div>
+              <div className="sub-date-hint">Pick a calendar date</div>
+            </div>
+            <button
+              type="button"
+              className="sub-date-nav"
+              onClick={() => moveMonth(1)}
+              aria-label="Next month"
+            >
+              <i className="ti ti-chevron-right"></i>
+            </button>
+          </div>
+
+          <div className="sub-date-weekdays" aria-hidden="true">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+              <span key={day}>{day}</span>
+            ))}
+          </div>
+
+          <div className="sub-date-grid">
+            {days.map((day) => (
+              <button
+                key={day.value}
+                className={[
+                  "sub-date-day",
+                  day.inMonth ? "" : "muted",
+                  day.value === value ? "selected" : "",
+                  day.value === todayValue ? "today" : "",
+                ].join(" ")}
+                type="button"
+                onClick={() => selectDate(day.value)}
+              >
+                {day.date.getDate()}
+              </button>
+            ))}
+          </div>
+
+          <div className="sub-date-actions">
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              Clear
+            </button>
+            <button type="button" onClick={() => selectDate(todayValue)}>
+              Today
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimePickerField({
+  value,
+  placeholder,
+  readOnly,
+  onChange,
+}: {
+  value: string;
+  placeholder: string;
+  readOnly?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { rootRef, popoverRef, placement, maxHeight } =
+    usePopoverCollision(open);
+  const [draft, setDraft] = useState(() => parseTimeValue(value));
+  const displayValue = value ? formatTimeDisplay(value) : "";
+
+  useEffect(() => {
+    if (open) setDraft(parseTimeValue(value));
+  }, [open, value]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  function adjust(part: "hour" | "minute", offset: number) {
+    setDraft((current) => {
+      if (part === "hour") {
+        const next = cycleNumber(current.hour + offset, 1, 12);
+        return { ...current, hour: next };
+      }
+      const next = cycleNumber(current.minute + offset, 0, 59);
+      return { ...current, minute: next };
+    });
+  }
+
+  function applyTime() {
+    onChange(timePartsToValue(draft));
+    setOpen(false);
+  }
+
+  return (
+    <div
+      className={`sub-time-field ${open ? "is-open" : ""} ${placement}`}
+      ref={rootRef}
+    >
+      <button
+        className={`sub-time-trigger ${open ? "open" : ""}`}
+        type="button"
+        disabled={readOnly}
+        onClick={() => {
+          if (!readOnly) setOpen((current) => !current);
+        }}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+      >
+        <span className={displayValue ? "" : "placeholder"}>
+          {displayValue || placeholder}
+        </span>
+        <i className="ti ti-clock"></i>
+      </button>
+
+      {open && !readOnly && (
+        <div
+          className="sub-time-popover"
+          ref={popoverRef}
+          role="dialog"
+          aria-label={placeholder}
+          style={{ maxHeight }}
+        >
+          <div className="sub-time-head">
+            <div>
+              <div className="sub-time-title">Preferred time</div>
+              <div className="sub-time-hint">Set the requested publish time</div>
+            </div>
+            <div className="sub-time-preview">
+              {formatTimeParts(draft)}
+            </div>
+          </div>
+
+          <div className="sub-time-controls">
+            <TimeStepper
+              label="Hour"
+              value={String(draft.hour).padStart(2, "0")}
+              onIncrement={() => adjust("hour", 1)}
+              onDecrement={() => adjust("hour", -1)}
+            />
+            <TimeStepper
+              label="Minute"
+              value={String(draft.minute).padStart(2, "0")}
+              onIncrement={() => adjust("minute", 1)}
+              onDecrement={() => adjust("minute", -1)}
+            />
+            <div className="sub-time-period" aria-label="Meridiem">
+              {(["AM", "PM"] as const).map((period) => (
+                <button
+                  key={period}
+                  type="button"
+                  className={draft.period === period ? "active" : ""}
+                  onClick={() =>
+                    setDraft((current) => ({ ...current, period }))
+                  }
+                >
+                  {period}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="sub-time-quick">
+            {[0, 15, 30, 45].map((minute) => (
+              <button
+                key={minute}
+                type="button"
+                className={draft.minute === minute ? "active" : ""}
+                onClick={() =>
+                  setDraft((current) => ({ ...current, minute }))
+                }
+              >
+                :{String(minute).padStart(2, "0")}
+              </button>
+            ))}
+          </div>
+
+          <div className="sub-time-actions">
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              Clear
+            </button>
+            <button type="button" onClick={applyTime}>
+              Apply Time
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimeStepper({
+  label,
+  value,
+  onIncrement,
+  onDecrement,
+}: {
+  label: string;
+  value: string;
+  onIncrement: () => void;
+  onDecrement: () => void;
+}) {
+  return (
+    <div className="sub-time-stepper">
+      <button type="button" onClick={onIncrement} aria-label={`Increase ${label}`}>
+        <i className="ti ti-chevron-up"></i>
+      </button>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+      <button type="button" onClick={onDecrement} aria-label={`Decrease ${label}`}>
+        <i className="ti ti-chevron-down"></i>
+      </button>
+    </div>
+  );
+}
+
+function usePopoverCollision(open: boolean) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [placement, setPlacement] =
+    useState<PopoverPlacement>("drop-down");
+  const [maxHeight, setMaxHeight] = useState(420);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let frame = 0;
+    const viewportGap = 18;
+    const triggerGap = 10;
+    const minComfortHeight = 260;
+
+    function updatePlacement() {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const root = rootRef.current;
+        const popover = popoverRef.current;
+        if (!root || !popover) return;
+
+        const rootRect = root.getBoundingClientRect();
+        const naturalHeight = popover.scrollHeight;
+        const spaceBelow =
+          window.innerHeight - rootRect.bottom - triggerGap - viewportGap;
+        const spaceAbove = rootRect.top - triggerGap - viewportGap;
+        const shouldDropUp =
+          spaceBelow < Math.min(naturalHeight, minComfortHeight) &&
+          spaceAbove > spaceBelow;
+        const availableSpace = shouldDropUp ? spaceAbove : spaceBelow;
+        const safeHeight = Math.max(
+          220,
+          Math.min(naturalHeight, availableSpace),
+        );
+
+        setPlacement(shouldDropUp ? "drop-up" : "drop-down");
+        setMaxHeight(safeHeight);
+      });
+    }
+
+    updatePlacement();
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, true);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [open]);
+
+  return { rootRef, popoverRef, placement, maxHeight };
+}
+
+function stepLabel(step: ProgressStep) {
+  if (step === "media") return "Media Assets";
+  if (step === "details") return "Post Details";
+  return "Preferred Schedule";
+}
+
+function QueueSkeleton() {
+  return (
+    <div className="sub-queue-skeleton" aria-label="Loading submissions">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div className="sub-queue-skeleton-card" key={index}>
+          <span className="sub-skel-line wide sub-shimmer"></span>
+          <span className="sub-skel-line sub-shimmer"></span>
+          <div className="sub-skel-thumbs">
+            <span className="sub-skel-thumb sub-shimmer"></span>
+            <span className="sub-skel-thumb sub-shimmer"></span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SubmissionHydrationSkeleton() {
+  return (
+    <div className="sub-hydration-skeleton" aria-label="Loading draft">
+      <span className="sub-skel-line title sub-shimmer"></span>
+      <span className="sub-skel-block sub-shimmer"></span>
+      <span className="sub-skel-line wide sub-shimmer"></span>
+      <span className="sub-skel-line sub-shimmer"></span>
+    </div>
+  );
+}
+
+function ReadinessSkeleton() {
+  return (
+    <div className="sub-readiness-skeleton" aria-label="Loading readiness">
+      <span className="sub-skel-ring sub-shimmer"></span>
+      <span className="sub-skel-line wide sub-shimmer"></span>
+      <span className="sub-skel-line sub-shimmer"></span>
+    </div>
+  );
+}
+
+function SubmissionReviewPanel({
+  status,
+  form,
+  user,
+  scheduledAt,
+}: {
+  status: SubmissionStatus | null;
+  form: FormState;
+  user: User;
+  scheduledAt?: string;
+}) {
+  const mediaCount = form.savedAssets.length + form.files.length;
+
+  return (
+    <div className="sub-review-panel">
+      <div className="sub-review-head">
+        <div className="sub-review-icon">
+          <i className="ti ti-eye-check"></i>
+        </div>
+        <div className="sub-review-title">Submitted Preview</div>
+        <div className="sub-review-sub">
+          {status ? statusLabels[status] : "Submitted"} content is read-only.
+        </div>
+      </div>
+
+      <div className="sub-review-summary">
+        <ReviewFact label="Title" value={form.eventTitle || "Untitled submission"} />
+        <ReviewFact label="Institution" value={user.inst} />
+        <ReviewFact label="Event Date" value={form.eventDate ? formatDate(form.eventDate) : "Not provided"} />
+        <ReviewFact label="Schedule" value={scheduledAt ? formatDateTime(scheduledAt) : "Not scheduled"} />
+        <ReviewFact label="Media" value={`${mediaCount} asset${mediaCount === 1 ? "" : "s"}`} />
+      </div>
+    </div>
+  );
+}
+
+function ReviewFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="sub-review-fact">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
@@ -1041,6 +2019,8 @@ function ConfirmModal({
   description,
   cancelLabel,
   confirmLabel,
+  loading = false,
+  disabled = false,
   onCancel,
   onConfirm,
 }: {
@@ -1050,11 +2030,16 @@ function ConfirmModal({
   description: string;
   cancelLabel?: string;
   confirmLabel: string;
+  loading?: boolean;
+  disabled?: boolean;
   onCancel?: () => void;
   onConfirm: () => void;
 }) {
   return (
-    <div className="sub-modal-overlay" onClick={onCancel || onConfirm}>
+    <div
+      className="sub-modal-overlay"
+      onClick={disabled ? undefined : onCancel || onConfirm}
+    >
       <div className="sub-modal" onClick={(event) => event.stopPropagation()}>
         <div className={`sub-modal-icon ${tone}`}>
           <i className={`ti ${icon}`}></i>
@@ -1067,6 +2052,7 @@ function ConfirmModal({
               className="sub-modal-btn cancel"
               type="button"
               onClick={onCancel}
+              disabled={disabled}
             >
               {cancelLabel}
             </button>
@@ -1075,7 +2061,10 @@ function ConfirmModal({
             className={`sub-modal-btn ${tone}`}
             type="button"
             onClick={onConfirm}
+            disabled={disabled}
+            aria-busy={loading}
           >
+            {loading && <i className="ti ti-loader-2 sub-spin"></i>}
             {confirmLabel}
           </button>
         </div>
@@ -1104,6 +2093,55 @@ function toPayload(form: FormState, scheduledAt?: string): SubmissionPayload {
   };
 }
 
+function getSubmitBlockers(
+  form: FormState,
+  scheduledAt: string | undefined,
+  allowedFileTypes: string[],
+  maxFileSizeMb: number,
+): SubmitBlocker[] {
+  const blockers: SubmitBlocker[] = [];
+  if (
+    form.files.some((file) => file.size > maxFileSizeMb * 1024 * 1024)
+  ) {
+    blockers.push({ label: "media within file size limit", step: "media" });
+  }
+  if (
+    form.files.some((file) => !isAllowedFile(file, allowedFileTypes))
+  ) {
+    blockers.push({ label: "accepted media file formats", step: "media" });
+  }
+  if (!form.eventTitle.trim()) {
+    blockers.push({ label: "event title", step: "details" });
+  }
+  if (!form.eventDate) {
+    blockers.push({ label: "event date", step: "details" });
+  }
+  if (!form.caption.trim()) {
+    blockers.push({ label: "caption", step: "details" });
+  }
+  if (!scheduledAt) {
+    blockers.push({ label: "preferred schedule date and time", step: "schedule" });
+  }
+
+  return blockers;
+}
+
+function isDirtyDraft(form: FormState) {
+  return Boolean(
+    form.id ||
+      form.eventTitle.trim() ||
+      form.eventDate ||
+      form.caption.trim() ||
+      form.description.trim() ||
+      form.category ||
+      form.scheduledDate ||
+      form.scheduledTime ||
+      form.tags.length ||
+      form.files.length ||
+      form.savedAssets.length,
+  );
+}
+
 function upsertSubmission(items: SubmissionSummary[], next: SubmissionSummary) {
   const exists = items.some((item) => item.id === next.id);
   if (!exists) return [next, ...items];
@@ -1118,7 +2156,6 @@ function calculateReadiness(
   if (form.eventTitle.trim()) score += 15;
   if (form.eventDate) score += 15;
   if (captionTone(form.caption) === "ok") score += 20;
-  score += 10;
   if (form.files.length > 0 || form.savedAssets.length > 0) score += 20;
   if (form.scheduledDate && form.scheduledTime) score += 10;
   if (guardRails && !guardRails.blocked) score += 10;
@@ -1156,6 +2193,27 @@ function filePreviewUrl(file: File) {
   return next;
 }
 
+function mediaPreviewSrc(form: FormState, selectedFileIndex: number) {
+  const selectedFile = form.files[selectedFileIndex];
+  if (selectedFile?.type.startsWith("image/")) {
+    return filePreviewUrl(selectedFile);
+  }
+  const imageAsset =
+    form.savedAssets[selectedFileIndex] ||
+    form.savedAssets.find((asset) =>
+      ["image", "jpeg", "jpg", "png", "webp", "gif"].some((type) =>
+        asset.fileType.toLowerCase().startsWith(type),
+      ),
+    );
+  if (!imageAsset) return "";
+  const fileType = imageAsset.fileType.toLowerCase();
+  return ["image", "jpeg", "jpg", "png", "webp", "gif"].some((type) =>
+    fileType.startsWith(type),
+  )
+    ? imageAsset.storageUrl
+    : "";
+}
+
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -1174,6 +2232,107 @@ function formatDateTime(value: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatLongDate(value: string) {
+  const date = parseInputDate(value);
+  if (!date) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatTimeDisplay(value: string) {
+  const parts = parseTimeValue(value);
+  return formatTimeParts(parts);
+}
+
+function formatTimeParts(parts: { hour: number; minute: number; period: "AM" | "PM" }) {
+  return `${parts.hour}:${String(parts.minute).padStart(2, "0")} ${parts.period}`;
+}
+
+function parseTimeValue(value: string) {
+  if (!value) {
+    const now = new Date();
+    return toTimeParts(now.getHours(), now.getMinutes());
+  }
+  const [hourPart, minutePart] = value.split(":").map(Number);
+  if (Number.isNaN(hourPart) || Number.isNaN(minutePart)) {
+    const now = new Date();
+    return toTimeParts(now.getHours(), now.getMinutes());
+  }
+  return toTimeParts(hourPart, minutePart);
+}
+
+function toTimeParts(hour24: number, minute: number) {
+  const period: "AM" | "PM" = hour24 >= 12 ? "PM" : "AM";
+  const hour = hour24 % 12 || 12;
+  return {
+    hour,
+    minute: Math.min(Math.max(minute, 0), 59),
+    period,
+  };
+}
+
+function timePartsToValue(parts: {
+  hour: number;
+  minute: number;
+  period: "AM" | "PM";
+}) {
+  const hour24 =
+    parts.period === "PM"
+      ? parts.hour === 12
+        ? 12
+        : parts.hour + 12
+      : parts.hour === 12
+        ? 0
+        : parts.hour;
+  return `${String(hour24).padStart(2, "0")}:${String(parts.minute).padStart(2, "0")}`;
+}
+
+function cycleNumber(value: number, min: number, max: number) {
+  if (value > max) return min;
+  if (value < min) return max;
+  return value;
+}
+
+function parseInputDate(value: string) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function dateToInputValue(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function buildCalendarDays(monthDate: Date) {
+  const firstOfMonth = new Date(
+    monthDate.getFullYear(),
+    monthDate.getMonth(),
+    1,
+  );
+  const start = new Date(firstOfMonth);
+  start.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return {
+      date,
+      value: dateToInputValue(date),
+      inMonth: date.getMonth() === monthDate.getMonth(),
+    };
+  });
 }
 
 function formatTimeInput(value: string) {
