@@ -18,6 +18,10 @@ public class MediaAssetDetailDto {
     private String aiCategory;
     private BigDecimal aiConfidence;
     private String aiDescription;
+    private Instant aiClassifiedAt;
+    private String aiClassificationModel;
+    private Instant embeddingGeneratedAt;
+    private String embeddingModel;
     private Instant createdAt;
     private UUID uploaderId;
     private String uploaderEmail;
@@ -35,6 +39,10 @@ public class MediaAssetDetailDto {
         dto.aiCategory = asset.getAiCategory();
         dto.aiConfidence = asset.getAiConfidence();
         dto.aiDescription = asset.getAiDescription();
+        dto.aiClassifiedAt = asset.getAiClassifiedAt();
+        dto.aiClassificationModel = asset.getAiClassificationModel();
+        dto.embeddingGeneratedAt = asset.getEmbeddingGeneratedAt();
+        dto.embeddingModel = asset.getEmbeddingModel();
         dto.createdAt = asset.getCreatedAt();
         dto.uploaderId = asset.getUploader().getId();
         dto.uploaderEmail = asset.getUploader().getEmail();
@@ -77,6 +85,22 @@ public class MediaAssetDetailDto {
 
     public String getAiDescription() {
         return aiDescription;
+    }
+
+    public Instant getAiClassifiedAt() {
+        return aiClassifiedAt;
+    }
+
+    public String getAiClassificationModel() {
+        return aiClassificationModel;
+    }
+
+    public Instant getEmbeddingGeneratedAt() {
+        return embeddingGeneratedAt;
+    }
+
+    public String getEmbeddingModel() {
+        return embeddingModel;
     }
 
     public Instant getCreatedAt() {

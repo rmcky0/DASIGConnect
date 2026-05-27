@@ -48,13 +48,14 @@ public class MediaAssetController {
     public ResponseEntity<MediaAssetListResponseDto> list(
             @RequestParam(required = false) String query,
             @RequestParam(required = false) String aiCategory,
+            @RequestParam(required = false) String mediaType,
             @RequestParam(required = false) UUID uploaderId,
             @RequestParam(defaultValue = "newest") String sort,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "25") int pageSize,
             @RequestParam(required = false) String scope,
             @AuthenticationPrincipal JwtUserDetails user) {
-        return ResponseEntity.ok(mediaAssetService.list(query, aiCategory, uploaderId, sort, page, pageSize, scope, user));
+        return ResponseEntity.ok(mediaAssetService.list(query, aiCategory, mediaType, uploaderId, sort, page, pageSize, scope, user));
     }
 
     @GetMapping("/{id}")

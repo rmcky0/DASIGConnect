@@ -34,6 +34,7 @@ import com.dasigconnect.backend.repository.MediaAssetRepository;
 import com.dasigconnect.backend.repository.SubmissionMediaAssetRepository;
 import com.dasigconnect.backend.repository.SubmissionRepository;
 import com.dasigconnect.backend.security.JwtUserDetails;
+import com.dasigconnect.backend.service.AIClassificationService;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -42,12 +43,15 @@ import jakarta.persistence.PersistenceContext;
 @Transactional
 public class MediaAssetService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MediaAssetService.class);
+
     private final MediaAssetRepository mediaAssetRepository;
     private final SubmissionRepository submissionRepository;
     private final SubmissionMediaAssetRepository submissionMediaAssetRepository;
     private final AssetTagRepository assetTagRepository;
     private final SubmissionService submissionService;
     private final SupabaseStorageService supabaseStorageService;
+    private final AIClassificationService aiClassificationService;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -58,19 +62,22 @@ public class MediaAssetService {
             SubmissionMediaAssetRepository submissionMediaAssetRepository,
             AssetTagRepository assetTagRepository,
             SubmissionService submissionService,
-            SupabaseStorageService supabaseStorageService) {
+            SupabaseStorageService supabaseStorageService,
+            AIClassificationService aiClassificationService) {
         this.mediaAssetRepository = mediaAssetRepository;
         this.submissionRepository = submissionRepository;
         this.submissionMediaAssetRepository = submissionMediaAssetRepository;
         this.assetTagRepository = assetTagRepository;
         this.submissionService = submissionService;
         this.supabaseStorageService = supabaseStorageService;
+        this.aiClassificationService = aiClassificationService;
     }
 
     @Transactional(readOnly = true)
     public MediaAssetListResponseDto list(
             String query,
             String aiCategory,
+            String mediaType,
             UUID uploaderId,
             String sort,
             int page,
@@ -81,6 +88,7 @@ public class MediaAssetService {
         int safePageSize = Math.min(Math.max(pageSize, 1), 100);
         String trimmedQuery = query == null ? "" : query.trim().toLowerCase();
         String trimmedCategory = aiCategory == null ? "" : aiCategory.trim();
+        String trimmedMediaType = mediaType == null ? "" : mediaType.trim().toLowerCase();
 
         boolean networkScope = isAdmin(user) && "network".equalsIgnoreCase(scope);
         List<MediaAsset> source = networkScope
@@ -94,6 +102,8 @@ public class MediaAssetService {
                 || containsIgnoreCase(asset.getAssetCode(), trimmedQuery))
                 .filter(asset -> trimmedCategory.isBlank()
                 || (asset.getAiCategory() != null && asset.getAiCategory().equalsIgnoreCase(trimmedCategory)))
+                .filter(asset -> trimmedMediaType.isBlank()
+                || ("image".equals(trimmedMediaType) ? asset.getFileType().isImage() : asset.getFileType().isVideo()))
                 .filter(asset -> uploaderId == null
                 || (asset.getUploader() != null && uploaderId.equals(asset.getUploader().getId())))
                 .sorted(resolveSort(sort))
@@ -195,6 +205,18 @@ public class MediaAssetService {
         asset.setFileSizeBytes(dto.getFileSizeBytes());
         asset = mediaAssetRepository.save(asset);
 
+        // Trigger async classification + embedding — never blocks the upload response
+        final UUID savedId = asset.getId();
+        final String savedUrl = asset.getStorageUrl();
+        final MediaFileType savedType = asset.getFileType();
+        try {
+            if (savedType.isImage()) {
+                aiClassificationService.classifyAndEmbed(savedId, savedUrl);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to trigger AI classification for asset {}: {}", savedId, e.getMessage());
+        }
+
         return MediaAssetDetailDto.from(asset, List.of(), List.of());
     }
 
@@ -209,6 +231,7 @@ public class MediaAssetService {
         AssetTag tag = new AssetTag();
         tag.setMediaAsset(asset);
         tag.setLabel(trimmedLabel);
+        tag.setSource("manual");
         return AssetTagDto.from(assetTagRepository.save(tag));
     }
 

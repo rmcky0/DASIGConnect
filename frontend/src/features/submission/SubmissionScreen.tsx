@@ -26,9 +26,11 @@ import { useFacebookPreviewData } from "../../hooks/useFacebookPreviewData";
 import { fileMediaKey, savedMediaKey } from "../../hooks/useMediaReorder";
 import type { User } from "../../types/auth.types";
 import type { FacebookPreviewDetailsData } from "../../types/facebook";
+import type { SubmissionMediaItem } from "../../types/media";
 import { useToast } from "../../context/ToastContext";
 import FacebookPreviewCard from "../../components/facebook/FacebookPreviewCard";
 import FacebookPreviewModal from "../../components/facebook/FacebookPreviewModal";
+import MediaAssetsPicker from "../../components/media/MediaAssetsPicker";
 import { useAiCaptionAssist } from "../../hooks/useAiCaptionAssist";
 import AiCaptionButton from "./components/AiCaptionButton";
 import AiCaptionSuggestion from "./components/AiCaptionSuggestion";
@@ -102,8 +104,8 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const detailsSectionRef = useRef<HTMLElement | null>(null);
   const prefilledRef = useRef(false);
   const [filter, setFilter] = useState<QueueFilter>("drafts");
-  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [form, setForm] = useState<FormState>(initialForm);
+  const [pickerItems, setPickerItems] = useState<SubmissionMediaItem[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [modal, setModal] = useState<ModalState>(null);
   const [isPreviewModalOpen, setPreviewModalOpen] = useState(false);
@@ -250,6 +252,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         mediaOrder: assets.map((asset) => savedMediaKey(asset.id)),
         pendingAssetIds: assets.map((asset) => asset.id),
       }));
+      setPickerItems(assets.map(savedAssetToPickerItem));
 
       if (assets.length < ids.length) {
         toast.warning("Some selected assets could not be loaded.");
@@ -314,6 +317,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         ),
         pendingAssetIds: [],
       });
+      setPickerItems((submission.mediaAssets ?? []).map(savedAssetToPickerItem));
       setActiveMediaIndex(0);
     } catch {
       toast.error("Could not load submission detail.");
@@ -360,6 +364,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         mediaOrder: orderedSavedAssets.map((asset) => savedMediaKey(asset.id)),
         pendingAssetIds: [],
       }));
+      setPickerItems(orderedSavedAssets.map(savedAssetToPickerItem));
       setSubmissions((current) =>
         upsertSubmission(current, finalResponse.data),
       );
@@ -424,17 +429,17 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       }
       const submitted = await submitForReview(draftResponse.data.id);
       setSubmissions((current) => upsertSubmission(current, submitted.data));
+      const submittedAssets = submitted.data.mediaAssets ?? form.savedAssets;
       setForm((current) => ({
         ...current,
         id: submitted.data.id,
         status: submitted.data.status,
         files: [],
-        savedAssets: submitted.data.mediaAssets ?? current.savedAssets,
-        mediaOrder: (submitted.data.mediaAssets ?? current.savedAssets).map(
-          (asset) => savedMediaKey(asset.id),
-        ),
+        savedAssets: submittedAssets,
+        mediaOrder: submittedAssets.map((asset) => savedMediaKey(asset.id)),
         pendingAssetIds: [],
       }));
+      setPickerItems(submittedAssets.map(savedAssetToPickerItem));
       clearAssetIdParam();
       setModal("success");
       toast.success("Submission sent for review.");
@@ -449,6 +454,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   async function handleDelete() {
     if (!form.id) {
       setForm(initialForm);
+      setPickerItems([]);
       setModal(null);
       return;
     }
@@ -459,6 +465,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         current.filter((item) => item.id !== form.id),
       );
       setForm(initialForm);
+      setPickerItems([]);
       setModal(null);
       toast.info("Draft deleted.");
     } catch (err: unknown) {
@@ -466,29 +473,34 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     }
   }
 
-  function handleFiles(files: FileList | null) {
-    if (!files) return;
-    const nextFiles = Array.from(files);
+  function handlePickerChange(items: SubmissionMediaItem[]) {
+    setPickerItems(items);
+    const currentSavedIds = new Set(form.savedAssets.map((a) => a.id));
+    const newFiles = items.filter((i) => i.source === "upload" && i.file).map((i) => i.file!);
+    const newSavedAssets: SavedMediaAsset[] = items
+      .filter((i) => i.assetId)
+      .map((i) => {
+        const existing = form.savedAssets.find((a) => a.id === i.assetId);
+        return existing ?? {
+          id: i.assetId!,
+          storageUrl: i.previewUrl,
+          fileName: i.fileName,
+          fileType: i.mediaType === "video" ? "mp4" : (i.fileName.split(".").pop()?.toLowerCase() ?? "jpg"),
+          fileSizeBytes: 0,
+        };
+      });
+    const newPendingAssetIds = items
+      .filter((i) => i.assetId && !currentSavedIds.has(i.assetId))
+      .map((i) => i.assetId!);
+    const newMediaOrder = items.map((i) =>
+      i.assetId ? savedMediaKey(i.assetId) : i.file ? fileMediaKey(i.file) : i.clientId,
+    );
     setForm((current) => ({
       ...current,
-      files: [...current.files, ...nextFiles],
-      mediaOrder: [
-        ...current.mediaOrder,
-        ...nextFiles.map((file) => fileMediaKey(file)),
-      ],
-    }));
-    setSelectedFileIndex(0);
-    setActiveMediaIndex(0);
-    setSaveState("idle");
-  }
-
-  function handleRemoveSavedAsset(assetId: string) {
-    setForm((current) => ({
-      ...current,
-      savedAssets: current.savedAssets.filter((a) => a.id !== assetId),
-      mediaOrder: current.mediaOrder.filter(
-        (key) => key !== savedMediaKey(assetId),
-      ),
+      files: newFiles,
+      savedAssets: newSavedAssets,
+      pendingAssetIds: newPendingAssetIds,
+      mediaOrder: newMediaOrder,
     }));
     setSaveState("idle");
   }
@@ -503,6 +515,16 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       mediaOrder: orderedIds,
     }));
     setSaveState("idle");
+
+    // Sync picker items to match the new order
+    const orderMap = new Map(orderedIds.map((id, i) => [id, i]));
+    setPickerItems((prev) =>
+      [...prev].sort((a, b) => {
+        const aKey = a.assetId ? savedMediaKey(a.assetId) : a.file ? fileMediaKey(a.file) : a.clientId;
+        const bKey = b.assetId ? savedMediaKey(b.assetId) : b.file ? fileMediaKey(b.file) : b.clientId;
+        return (orderMap.get(aKey) ?? 999) - (orderMap.get(bKey) ?? 999);
+      }),
+    );
 
     if (!form.id || sortedFiles.length > 0 || sortedSavedAssets.length <= 1) {
       return;
@@ -520,6 +542,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         savedAssets: nextAssets,
         mediaOrder: nextAssets.map((asset) => savedMediaKey(asset.id)),
       }));
+      setPickerItems(nextAssets.map(savedAssetToPickerItem));
       setSubmissions((current) => upsertSubmission(current, data));
       toast.success("Media order updated.");
     } catch (err: unknown) {
@@ -681,7 +704,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
             <button
               className="sub-btn-new"
               type="button"
-              onClick={() => setForm(initialForm)}
+              onClick={() => { setForm(initialForm); setPickerItems([]); }}
             >
               <i className="ti ti-plus"></i> New Submission
             </button>
@@ -727,105 +750,18 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
               icon="ti-photo-up"
               tone="blue"
               title="Media Assets"
-              subtitle="Attach photos or videos from the event."
+              subtitle="Upload files, pick from your library, or let AI suggest relevant assets."
             />
-            <label className="sub-upload-zone">
-              <input
-                className="sub-file-input"
-                type="file"
-                multiple
-                accept="image/*,video/*"
-                onChange={(event) => handleFiles(event.target.files)}
-              />
-              <div className="sub-upload-icon">
-                <i className="ti ti-cloud-upload"></i>
-              </div>
-              <div className="sub-upload-title">Drop files here or browse</div>
-              <div className="sub-upload-sub">
-                Images and videos are attached to the draft and uploaded when
-                you save.
-              </div>
-              <div className="sub-upload-types">
-                <span>JPG</span>
-                <span>PNG</span>
-                <span>MP4</span>
-                <span>MOV</span>
-              </div>
-            </label>
-            {(form.savedAssets.length > 0 || form.files.length > 0) && (
-              <div className="sub-filmstrip">
-                {form.savedAssets.map((asset) => (
-                  <div className="sub-film-item" key={asset.id}>
-                    {asset.fileType.startsWith("image") ||
-                    ["jpeg", "jpg", "png", "webp", "gif"].includes(
-                      asset.fileType,
-                    ) ? (
-                      <img src={asset.storageUrl} alt={asset.fileName} />
-                    ) : (
-                      <div className="sub-film-video">
-                        <i className="ti ti-video"></i>
-                      </div>
-                    )}
-                    <span className="sub-film-badge">
-                      {asset.fileType.toUpperCase()}
-                    </span>
-                    <span
-                      className="sub-film-del"
-                      role="button"
-                      tabIndex={0}
-                      aria-label="Remove asset"
-                      onClick={() => handleRemoveSavedAsset(asset.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ")
-                          handleRemoveSavedAsset(asset.id);
-                      }}
-                    >
-                      <i className="ti ti-x"></i>
-                    </span>
-                  </div>
-                ))}
-                {form.files.map((file, index) => (
-                  <button
-                    className={`sub-film-item ${selectedFileIndex === index ? "selected" : ""}`}
-                    key={`${file.name}-${file.lastModified}`}
-                    type="button"
-                    onClick={() => setSelectedFileIndex(index)}
-                  >
-                    {file.type.startsWith("image/") ? (
-                      <img src={filePreviewUrl(file)} alt={file.name} />
-                    ) : (
-                      <div className="sub-film-video">
-                        <i className="ti ti-video"></i>
-                      </div>
-                    )}
-                    <span className="sub-film-num">{index + 1}</span>
-                    <span className="sub-film-badge">
-                      {file.type.startsWith("video/") ? "VIDEO" : "IMAGE"}
-                    </span>
-                    <span
-                      className="sub-film-del"
-                      role="button"
-                      tabIndex={0}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setForm((current) => ({
-                          ...current,
-                          files: current.files.filter(
-                            (_, fileIndex) => fileIndex !== index,
-                          ),
-                          mediaOrder: current.mediaOrder.filter(
-                            (id) => id !== fileMediaKey(file),
-                          ),
-                        }));
-                        setActiveMediaIndex(0);
-                      }}
-                    >
-                      <i className="ti ti-x"></i>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <MediaAssetsPicker
+              items={pickerItems}
+              onItemsChange={handlePickerChange}
+              submissionId={form.id}
+              eventTitle={form.eventTitle}
+              caption={form.caption}
+              category={form.category}
+              tags={form.tags}
+              disabled={form.status !== "draft"}
+            />
           </section>
 
           <section className="sub-form-section" ref={detailsSectionRef}>
@@ -1398,6 +1334,18 @@ function BrandMark() {
   );
 }
 
+function savedAssetToPickerItem(asset: SavedMediaAsset): SubmissionMediaItem {
+  const isVideo = ["mp4", "mov", "webm"].includes(asset.fileType.toLowerCase());
+  return {
+    clientId: `library-${asset.id}`,
+    source: "library",
+    assetId: asset.id,
+    previewUrl: asset.storageUrl,
+    mediaType: isVideo ? "video" : "image",
+    fileName: asset.fileName,
+  };
+}
+
 function toPayload(form: FormState, scheduledAt?: string): SubmissionPayload {
   return {
     eventTitle: form.eventTitle.trim() || "Untitled submission",
@@ -1647,15 +1595,6 @@ function captionTone(caption: string) {
   return "warn";
 }
 
-const previewUrls = new WeakMap<File, string>();
-
-function filePreviewUrl(file: File) {
-  const existing = previewUrls.get(file);
-  if (existing) return existing;
-  const next = URL.createObjectURL(file);
-  previewUrls.set(file, next);
-  return next;
-}
 
 function formatDate(value: string) {
   const date = new Date(value);

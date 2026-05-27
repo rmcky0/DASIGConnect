@@ -16,7 +16,6 @@ export default function NotificationsScreen() {
     sseStatus,
     eventCount,
     lastEventTime,
-    latestIncomingId,
     activeFilter,
     setActiveFilter,
     unreadCount,
@@ -86,7 +85,6 @@ export default function NotificationsScreen() {
           <NotificationList
             notifications={notifications}
             onNotificationClick={markRead}
-            latestIncomingId={latestIncomingId ?? undefined}
             loading={loading}
             error={fetchError}
           />

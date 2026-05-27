@@ -1,6 +1,7 @@
 package com.dasigconnect.backend.external;
 
 import com.dasigconnect.backend.model.dto.ai.CaptionVariantDto;
+import com.dasigconnect.backend.model.dto.ai.MediaClassificationDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -327,6 +328,190 @@ public class ClaudeVisionClient {
             log.warn("Failed to parse Claude response: {}", e.getMessage());
             throw new ClaudeApiException("Could not parse caption variants from Claude response.");
         }
+    }
+
+    // ─── UC-3.3 Media Classification ────────────────────────────────────────────
+
+    private static final List<String> ALLOWED_CATEGORIES = List.of(
+            "Research and Development", "Innovation", "Seminar / Webinar", "Workshop",
+            "Conference / Forum", "Community Outreach", "Awards and Recognition",
+            "Competition / Contest", "Training / Bootcamp", "Partnership / Collaboration",
+            "Meeting / Coordination", "Facility / Campus", "General Event"
+    );
+
+    private static final List<String> ALLOWED_TAGS = List.of(
+            "Science", "Technology", "Engineering", "Mathematics",
+            "Innovation", "Research", "Community", "Outreach",
+            "Students", "Faculty", "Partnership", "DOST", "DASIG",
+            "IT Students", "Awarding", "Recognition", "Medal", "Certificate",
+            "Contest", "Competition", "Capstone", "Project Presentation",
+            "Research Presentation", "Prototype", "Robotics", "Training",
+            "Bootcamp", "Workshop", "Seminar", "Speaker", "Panel Discussion",
+            "Group Photo", "Ceremony", "Winners", "Participants", "Mentors",
+            "Academic Event", "Student Achievement", "Collaboration",
+            "Campus Event", "Innovation Showcase", "Community Engagement"
+    );
+
+    /**
+     * Classifies images into a DASIG event category with confidence and suggested tags.
+     * Uses a structured JSON prompt distinct from caption generation.
+     *
+     * @param imageUrls Supabase Storage URLs of the media assets to classify (max 4)
+     * @return MediaClassificationDto with category, confidence, description, and suggestedTags
+     * @throws ClaudeApiException on timeout or non-2xx response
+     */
+    public MediaClassificationDto classifyMedia(List<String> imageUrls) {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new ClaudeApiException("Anthropic API key is not configured.");
+        }
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            throw new ClaudeApiException("At least one image URL is required for classification.");
+        }
+
+        String payload = buildClassificationPayload(imageUrls);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL))
+                .header("x-api-key", apiKey)
+                .header("anthropic-version", ANTHROPIC_VERSION)
+                .header("content-type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .timeout(Duration.ofSeconds(30))
+                .build();
+
+        HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (java.net.http.HttpTimeoutException e) {
+            throw new ClaudeApiException("Claude classification timed out.");
+        } catch (Exception e) {
+            throw new ClaudeApiException("Claude classification request failed: " + e.getMessage());
+        }
+
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            log.warn("Claude classification returned status {}: {}", response.statusCode(), response.body());
+            throw new ClaudeApiException("Claude API error (HTTP " + response.statusCode() + ").");
+        }
+
+        return parseClassification(response.body());
+    }
+
+    public String modelName() {
+        return model;
+    }
+
+    private String buildClassificationPayload(List<String> imageUrls) {
+        try {
+            var contentArray = objectMapper.createArrayNode();
+
+            int imgCount = Math.min(imageUrls.size(), 4);
+            for (int i = 0; i < imgCount; i++) {
+                ImageData img = fetchAndPrepareImage(imageUrls.get(i));
+                String base64Data = Base64.getEncoder().encodeToString(img.bytes());
+
+                var imgBlock = objectMapper.createObjectNode();
+                imgBlock.put("type", "image");
+                var source = objectMapper.createObjectNode();
+                source.put("type", "base64");
+                source.put("media_type", img.mediaType());
+                source.put("data", base64Data);
+                imgBlock.set("source", source);
+                contentArray.add(imgBlock);
+            }
+
+            var textBlock = objectMapper.createObjectNode();
+            textBlock.put("type", "text");
+            textBlock.put("text", buildClassificationPrompt());
+            contentArray.add(textBlock);
+
+            var message = objectMapper.createObjectNode();
+            message.put("role", "user");
+            message.set("content", contentArray);
+
+            var messagesArray = objectMapper.createArrayNode();
+            messagesArray.add(message);
+
+            var root = objectMapper.createObjectNode();
+            root.put("model", model);
+            root.put("max_tokens", 256);
+            root.set("messages", messagesArray);
+
+            return objectMapper.writeValueAsString(root);
+        } catch (ClaudeApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ClaudeApiException("Failed to build classification payload: " + e.getMessage());
+        }
+    }
+
+    private String buildClassificationPrompt() {
+        return """
+            You are an AI classifier for DASIG (DOST Academe-Science and Innovation Group), \
+            a Philippine government science agency network.
+
+            Analyze the provided images and create a reusable media-library profile for search and recommendation.
+            Be specific about visible people, activity, event type, objects, setting, and likely context.
+
+            You MUST return ONLY a valid JSON object - no markdown, no explanation:
+            {
+              "category": "<exactly one of: Research and Development | Innovation | Seminar / Webinar | Workshop | Conference / Forum | Community Outreach | Awards and Recognition | Competition / Contest | Training / Bootcamp | Partnership / Collaboration | Meeting / Coordination | Facility / Campus | General Event>",
+              "confidence": <number between 0.0 and 1.0>,
+              "description": "<2-4 factual sentences describing the visible event, people, activity, objects, setting, and likely use case for social media selection>",
+              "suggestedTags": ["<8 to 15 useful tags from the allowed tag list>"]
+            }
+
+            Rules:
+            - category must be exactly one value from the allowed category list.
+            - suggestedTags must contain only values from this allowed tag list:
+              Science | Technology | Engineering | Mathematics | Innovation | Research | Community | Outreach | Students | Faculty | Partnership | DOST | DASIG | IT Students | Awarding | Recognition | Medal | Certificate | Contest | Competition | Capstone | Project Presentation | Research Presentation | Prototype | Robotics | Training | Bootcamp | Workshop | Seminar | Speaker | Panel Discussion | Group Photo | Ceremony | Winners | Participants | Mentors | Academic Event | Student Achievement | Collaboration | Campus Event | Innovation Showcase | Community Engagement
+            - Prefer concrete tags visible or strongly implied by the image over generic tags.
+            - Do not identify private individuals by name.
+            - Description must be factual, not promotional.
+            """;
+    }
+
+    private MediaClassificationDto parseClassification(String responseBody) {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            String text = root.path("content").get(0).path("text").asText().strip();
+            if (text.startsWith("```")) {
+                text = text.replaceAll("```[a-z]*\\n?", "").strip();
+            }
+
+            JsonNode node = objectMapper.readTree(text);
+
+            String category = node.path("category").asText("").strip();
+            if (!ALLOWED_CATEGORIES.contains(category)) {
+                category = ALLOWED_CATEGORIES.get(0);
+            }
+
+            double confidence = Math.min(1.0, Math.max(0.0, node.path("confidence").asDouble(0.5)));
+            String description = node.path("description").asText("").strip();
+
+            List<String> tags = new ArrayList<>();
+            for (JsonNode tagNode : node.path("suggestedTags")) {
+                String tag = tagNode.asText("").strip();
+                String allowed = canonicalAllowedTag(tag);
+                if (allowed != null && !tags.contains(allowed) && tags.size() < 15) {
+                    tags.add(allowed);
+                }
+            }
+
+            return new MediaClassificationDto(category, confidence, description, tags);
+        } catch (Exception e) {
+            log.warn("Failed to parse Claude classification response: {}", e.getMessage());
+            throw new ClaudeApiException("Could not parse classification from Claude response.");
+        }
+    }
+
+    private String canonicalAllowedTag(String value) {
+        if (value == null || value.isBlank()) return null;
+        for (String allowed : ALLOWED_TAGS) {
+            if (allowed.equalsIgnoreCase(value.strip())) {
+                return allowed;
+            }
+        }
+        return null;
     }
 
     public static class ClaudeApiException extends RuntimeException {

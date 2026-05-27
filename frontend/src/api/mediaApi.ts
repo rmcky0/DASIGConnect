@@ -71,6 +71,40 @@ interface MediaAssetPageResponse {
     createdAt: string;
   }>;
   totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface MediaAssetSearchParams {
+  networkView?: boolean;
+  query?: string;
+  aiCategory?: string;
+  mediaType?: "image" | "video";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface MediaAssetPage {
+  items: MediaAsset[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+function rawToAsset(raw: MediaAssetPageResponse["items"][0]): MediaAsset {
+  return {
+    id: raw.id,
+    code: raw.assetCode,
+    title: raw.fileName,
+    fileName: raw.fileName,
+    fileType: raw.fileType,
+    fileSizeBytes: raw.fileSizeBytes,
+    storageUrl: raw.storageUrl,
+    institutionId: "",
+    uploadedAt: raw.createdAt,
+    status: "ready" as const,
+    aiTags: raw.aiCategory ? [{ label: raw.aiCategory, confidence: 100 }] : [],
+  };
 }
 
 export function listMediaAssets(params?: { networkView?: boolean }, signal?: AbortSignal) {
@@ -82,20 +116,35 @@ export function listMediaAssets(params?: { networkView?: boolean }, signal?: Abo
     })
     .then((response) => ({
       ...response,
-      data: (response.data.items ?? []).map((raw) => ({
-        id: raw.id,
-        code: raw.assetCode,
-        title: raw.fileName,
-        fileName: raw.fileName,
-        fileType: raw.fileType,
-        fileSizeBytes: raw.fileSizeBytes,
-        storageUrl: raw.storageUrl,
-        institutionId: "",
-        uploadedAt: raw.createdAt,
-        status: "ready" as const,
-        aiTags: raw.aiCategory ? [{ label: raw.aiCategory, confidence: 100 }] : [],
-      })),
+      data: (response.data.items ?? []).map(rawToAsset),
     }));
+}
+
+export async function searchMediaAssets(
+  params: MediaAssetSearchParams = {},
+  signal?: AbortSignal
+): Promise<MediaAssetPage> {
+  const queryParams: Record<string, string | number | undefined> = {
+    scope: params.networkView ? "network" : undefined,
+    query: params.query || undefined,
+    aiCategory: params.aiCategory || undefined,
+    mediaType: params.mediaType || undefined,
+    page: params.page ?? 1,
+    pageSize: params.pageSize ?? 24,
+  };
+  Object.keys(queryParams).forEach(
+    (k) => queryParams[k] === undefined && delete queryParams[k]
+  );
+  const res = await api.get<MediaAssetPageResponse>("/media-assets", {
+    params: queryParams,
+    signal,
+  });
+  return {
+    items: (res.data.items ?? []).map(rawToAsset),
+    totalCount: res.data.totalCount ?? 0,
+    page: res.data.page ?? 1,
+    pageSize: res.data.pageSize ?? 24,
+  };
 }
 
 interface MediaAssetDetailResponse {
