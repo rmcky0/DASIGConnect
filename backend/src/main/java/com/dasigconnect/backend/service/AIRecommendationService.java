@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -106,7 +107,7 @@ public class AIRecommendationService {
      * we embed the contributor's title/caption/category/tags once, fetch pgvector nearest
      * neighbors, and re-rank a small candidate set with deterministic metadata boosts.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<MediaSuggestResultDto> suggestMedia(UUID submissionId, MediaSuggestRequestDto dto, JwtUserDetails user) {
         Submission submission = loadAndAuthorise(submissionId, user);
         UUID institutionId = submission.getInstitution().getId();

@@ -2,12 +2,14 @@ package com.dasigconnect.backend.service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.dasigconnect.backend.model.entity.MediaAsset;
 import com.dasigconnect.backend.repository.AssetTagRepository;
@@ -21,6 +23,7 @@ public class MediaAssetRetentionService {
     private final MediaAssetRepository mediaAssetRepository;
     private final AssetTagRepository assetTagRepository;
     private final SupabaseStorageService supabaseStorageService;
+    private final TransactionTemplate txTemplate;
     private final int retentionDays;
     private final int batchSize;
 
@@ -28,29 +31,43 @@ public class MediaAssetRetentionService {
             MediaAssetRepository mediaAssetRepository,
             AssetTagRepository assetTagRepository,
             SupabaseStorageService supabaseStorageService,
+            PlatformTransactionManager transactionManager,
             @Value("${app.media-assets.deleted-retention-days:30}") int retentionDays,
             @Value("${app.media-assets.purge-batch-size:25}") int batchSize) {
         this.mediaAssetRepository = mediaAssetRepository;
         this.assetTagRepository = assetTagRepository;
         this.supabaseStorageService = supabaseStorageService;
+        this.txTemplate = new TransactionTemplate(transactionManager);
         this.retentionDays = Math.max(retentionDays, 1);
         this.batchSize = Math.min(Math.max(batchSize, 1), 100);
     }
 
-    @Transactional
     public int purgeExpiredDeletedAssets() {
         Instant cutoff = Instant.now().minusSeconds(retentionDays * 24L * 60L * 60L);
-        List<MediaAsset> assets = mediaAssetRepository.findDeletedReadyForPurge(cutoff, batchSize);
-        for (MediaAsset asset : assets) {
-            purge(asset);
-        }
-        return assets.size();
-    }
 
-    private void purge(MediaAsset asset) {
-        boolean storageDeleted = supabaseStorageService.deletePublicObject(asset.getStorageUrl());
-        assetTagRepository.deleteByMediaAssetId(asset.getId());
-        mediaAssetRepository.purgeAiProfile(asset.getId());
-        log.info("Purged deleted media asset {} after retention. storageDeleted={}", asset.getId(), storageDeleted);
+        // Short read transaction to fetch candidates — connection released immediately after
+        List<MediaAsset> assets = txTemplate.execute(status ->
+                mediaAssetRepository.findDeletedReadyForPurge(cutoff, batchSize));
+        if (assets == null || assets.isEmpty()) return 0;
+
+        int purged = 0;
+        for (MediaAsset asset : assets) {
+            UUID assetId = asset.getId();
+            String storageUrl = asset.getStorageUrl();
+
+            // Storage deletion runs with no DB connection held
+            boolean storageDeleted = supabaseStorageService.deletePublicObject(storageUrl);
+
+            // Short write transaction for DB cleanup only
+            txTemplate.execute(status -> {
+                assetTagRepository.deleteByMediaAssetId(assetId);
+                mediaAssetRepository.purgeAiProfile(assetId);
+                return null;
+            });
+
+            log.info("Purged deleted media asset {} after retention. storageDeleted={}", assetId, storageDeleted);
+            purged++;
+        }
+        return purged;
     }
 }
