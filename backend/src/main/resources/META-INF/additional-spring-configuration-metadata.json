@@ -112,6 +112,12 @@
       "defaultValue": "v25.0"
     },
     {
+      "name": "app.facebook.oauth-redirect-uri",
+      "type": "java.lang.String",
+      "description": "OAuth callback URI registered in the Meta app for token refresh flow (UC-3.5).",
+      "defaultValue": "http://localhost:8080/api/admin/resolution/tokens/oauth-callback"
+    },
+    {
       "name": "anthropic.api.key",
       "type": "java.lang.String",
       "description": "Anthropic API key for Claude Vision caption and classification calls."
