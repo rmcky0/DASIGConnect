@@ -80,9 +80,15 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: `TokenHealthCheckJob` - GR-T4, runs daily at 08:00 UTC; invalid token → `TokenValidationFailedEvent`; expiry within 7 days → `TokenExpiryWarningEvent`.
 - Done: `FailedPublicationDto` - Resolution Center response DTO with last attempt detail and manual publish in-progress flag.
 - Done: `ManualPublishCompleteDto` - request DTO for manual publish completion (optional post URL + notes).
-- Done: `ManualPublishingService` - UC-3.4 start/complete/cancel/retry/clearAbandoned; audit log written on complete.
-- Done: `ResolutionController` - admin-only endpoints under `/api/v1/resolution`: list failures, retry, manual-publish start/complete/cancel.
-- Done: `AbandonmentDetectorJob` - runs every 5 minutes; clears manual publish sessions open longer than 2 hours.
+- Done: `ManualPublishingService` - UC-3.4 start/complete/cancel/retry/clearAbandoned; audit log written on complete with priorStatus, scheduledAt, publishedAt; cancel writes MANUAL_PUBLISH_CANCELLED; clearAbandoned writes MANUAL_PUBLISH_ABANDONED with startedAt/abandonedAt and sets lastManualPublishAbandonedAt.
+- Done: `ResolutionController` - admin-only endpoints under `/api/v1/resolution`: list failures, `GET /{id}` detail, retry, manual-publish start/complete/cancel.
+- Done: `ManualPublishDetailDto` - full post content DTO for the manual publish panel (caption, media assets sorted by displayOrder, scheduled time, contributor info, institution, in-progress flag, abandonment timestamp).
+- Done: `AbandonmentDetectorJob` (in `schedule/` package) - runs every 5 minutes; clears manual publish sessions open longer than 2 hours.
+- Done: Flyway V19 - adds `last_manual_publish_abandoned_at TIMESTAMPTZ` column to `submissions` for A2 abandonment note.
+- Done: `Submission` entity - `lastManualPublishAbandonedAt` field for tracking most recent 2-hour abandonment.
+- Done: `FailedPublicationDto` - exposes `lastManualPublishAbandonedAt`.
+- Done: Tests - `ManualPublishingServiceTest` (13), `ResolutionControllerTest` (12), `CaptionControllerTest` (9), `CaptionGenerationServiceTest` (9).
+- Not Started: UC-3.5 Administrator Exception Handling - `ExceptionHandlingController`, `ValidationTimeoutService`, `OverrideRequestService`, `DirectPostService`, `TokenManagementService`, `OverrideRequest` entity, Flyway V20 `override_requests` table.
 - Done: `application.properties` - `app.facebook.*` properties wired from env vars.
 - Done: all 208 backend tests pass after UC-3.1 implementation (no regressions).
 
@@ -166,6 +172,11 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: `frontend/src/api/resolutionApi.ts` calls `GET /api/v1/resolution/failures` and the action endpoints for retry plus manual publish start/complete/cancel.
 - Done: Resolution Center supports action busy states, confirmation modals, success/error toast feedback, list refresh after successful actions, and responsive failure cards.
 - Done: frontend code is componentized under `frontend/src/features/calendar`, `frontend/src/features/resolution`, `frontend/src/hooks`, and `frontend/src/api`; no hardcoded calendar events or failure records.
+- Done: `ManualPublishWorkflowPanel.tsx` — 3-step modal (Copy Content → Post to Facebook → Record Details). Spec-compliant: Mark as Published disabled when URL invalid (A3), correct error message, scheduled date/contributor/submission ID displayed, video instruction note, A2 abandonment banner when lastManualPublishAbandonedAt is set, live 2-hour countdown timer.
+- Done: `resolutionApi.ts` extended with `ManualPublishDetail`, `ManualPublishMediaItem` interfaces and `getResolutionDetail(id)`.
+- Done: `useResolutionFailures.ts` extended with `activeDetail`/`detailLoading` state, `openWorkflowPanel()`/`closeWorkflowPanel()`; `handleStartManual` auto-opens panel.
+- Done: `ResolutionCenterScreen.tsx` — wired `ManualPublishWorkflowPanel` replacing simple complete modal.
+- Not Started: UC-3.5 frontend — 5-tab Resolution Center (API Failures, Timeouts, Overrides, Direct Post, System & Audit) with per-tab badge counts, `ValidationTimeoutTab`, `OverrideRequestsTab`, `DirectPostTab`, `TokenManagementPanel`, `SlotSuggestionModal`, `RejectOnBehalfModal`.
 
 ### UC-2.2 Frontend - Media Repository
 
