@@ -724,6 +724,29 @@
 .sub-step.complete:not(.active) {
   color: var(--sub-green);
 }
+.sub-step.locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.sub-step.locked:hover {
+  background: transparent;
+}
+.sub-step.locked .sub-step-circle {
+  background: var(--sub-border-2);
+  border-color: var(--sub-border-2);
+  color: var(--sub-muted);
+}
+.sub-step-panel-btn.locked {
+  background: var(--sub-surface);
+  color: var(--sub-muted);
+  border-color: var(--sub-border-2);
+  cursor: pointer;
+}
+.sub-step-panel-btn.locked:hover {
+  background: #fef9c3;
+  border-color: #fde047;
+  color: #854d0e;
+}
 .sub-step-circle {
   width: 28px;
   height: 28px;

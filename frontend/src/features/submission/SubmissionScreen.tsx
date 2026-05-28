@@ -230,6 +230,25 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const busy =
     saveState === "saving" || submitting || deleting || reorderingMedia;
 
+  const isDetailsComplete = useMemo(
+    () =>
+      Boolean(form.eventTitle.trim()) &&
+      Boolean(form.eventDate) &&
+      Boolean(form.caption.trim()),
+    [form.eventTitle, form.eventDate, form.caption],
+  );
+
+  function handleStepNav(step: ProgressStep) {
+    if (step === "schedule" && !isDetailsComplete) {
+      toast.warning(
+        "Complete Post Details — title, event date, and caption — before setting a schedule.",
+      );
+      setActiveStep("details");
+      return;
+    }
+    setActiveStep(step);
+  }
+
   useEffect(() => {
     shouldPromptBeforeLeaveRef.current = shouldPromptBeforeLeave;
   }, [shouldPromptBeforeLeave]);
@@ -1137,7 +1156,8 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
             <StepProgress
               steps={progressSteps}
               activeStep={activeStep}
-              onStepClick={setActiveStep}
+              isDetailsComplete={isDetailsComplete}
+              onStepClick={handleStepNav}
             />
           )}
 
@@ -1340,7 +1360,11 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           </section>
 
           {!isReadOnlySubmission && (
-            <StepPanelActions activeStep={activeStep} onStepChange={setActiveStep} />
+            <StepPanelActions
+              activeStep={activeStep}
+              isDetailsComplete={isDetailsComplete}
+              onStepChange={handleStepNav}
+            />
           )}
             </>
           )}
@@ -1814,6 +1838,7 @@ function CheckItem({
 function StepProgress({
   steps,
   activeStep,
+  isDetailsComplete,
   onStepClick,
 }: {
   steps: Array<{
@@ -1822,21 +1847,34 @@ function StepProgress({
     complete: boolean;
   }>;
   activeStep: ProgressStep;
+  isDetailsComplete: boolean;
   onStepClick: (step: ProgressStep) => void;
 }) {
+  function isLocked(id: ProgressStep) {
+    return id === "schedule" && !isDetailsComplete;
+  }
+
   return (
     <div className="sub-step-nav" aria-label="Submission progress">
       {steps.map((step, index) => {
         const active = activeStep === step.id;
+        const locked = isLocked(step.id);
         return (
           <button
             key={step.id}
-            className={`sub-step ${active ? "active" : ""} ${step.complete ? "complete" : ""}`}
+            className={`sub-step ${active ? "active" : ""} ${step.complete ? "complete" : ""} ${locked ? "locked" : ""}`}
             type="button"
+            title={locked ? "Complete Post Details first — title, event date, and caption are required." : undefined}
             onClick={() => onStepClick(step.id)}
           >
             <span className="sub-step-circle">
-              {step.complete ? <i className="ti ti-check"></i> : index + 1}
+              {locked ? (
+                <i className="ti ti-lock"></i>
+              ) : step.complete ? (
+                <i className="ti ti-check"></i>
+              ) : (
+                index + 1
+              )}
             </span>
             <span className="sub-step-text">
               <span>Step {index + 1}</span>
@@ -1851,15 +1889,18 @@ function StepProgress({
 
 function StepPanelActions({
   activeStep,
+  isDetailsComplete,
   onStepChange,
 }: {
   activeStep: ProgressStep;
+  isDetailsComplete: boolean;
   onStepChange: (step: ProgressStep) => void;
 }) {
   const order: ProgressStep[] = ["details", "media", "schedule"];
   const index = order.indexOf(activeStep);
   const previous = index > 0 ? order[index - 1] : null;
   const next = index < order.length - 1 ? order[index + 1] : null;
+  const nextIsLocked = next === "schedule" && !isDetailsComplete;
 
   return (
     <div className="sub-step-panel-actions">
@@ -1874,10 +1915,23 @@ function StepPanelActions({
       {next ? (
         <button
           type="button"
-          className="sub-step-panel-btn primary"
+          className={`sub-step-panel-btn ${nextIsLocked ? "locked" : "primary"}`}
           onClick={() => onStepChange(next)}
+          title={
+            nextIsLocked
+              ? "Complete Post Details first — title, event date, and caption are required."
+              : undefined
+          }
         >
-          Next: {stepLabel(next)} <i className="ti ti-arrow-right"></i>
+          {nextIsLocked ? (
+            <>
+              <i className="ti ti-lock"></i> Complete Details First
+            </>
+          ) : (
+            <>
+              Next: {stepLabel(next)} <i className="ti ti-arrow-right"></i>
+            </>
+          )}
         </button>
       ) : (
         <span className="sub-step-panel-ready">
