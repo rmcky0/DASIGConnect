@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.dasigconnect.backend.model.dto.submission.SubmissionSummaryDto;
@@ -51,14 +52,18 @@ public class ValidationController {
 
     /**
      * GET /api/v1/validation/queue
-     * Returns all PENDING + IN_REVIEW submissions for the caller's institution,
-     * sorted by scheduledAt ASC.
+     * Active queue (default): PENDING + IN_REVIEW sorted by scheduledAt ASC.
+     * History (?history=true): all non-draft submissions outside the active queue,
+     * sorted by scheduledAt DESC. Used by the History tab in the validation UI.
      */
     @GetMapping("/queue")
     @PreAuthorize("hasAnyRole('VALIDATOR', 'ADMINISTRATOR')")
     public ResponseEntity<List<SubmissionSummaryDto>> getQueue(
+            @RequestParam(defaultValue = "false") boolean history,
             @AuthenticationPrincipal JwtUserDetails caller) {
-        return ResponseEntity.ok(validationService.getQueue(caller));
+        return ResponseEntity.ok(
+            history ? validationService.getHistory(caller) : validationService.getQueue(caller)
+        );
     }
 
     /**

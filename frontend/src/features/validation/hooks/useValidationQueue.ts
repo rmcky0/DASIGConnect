@@ -44,7 +44,7 @@ export function useValidationQueue() {
   const refresh = useCallback((signal?: AbortSignal) => {
     setLoading(true);
     setError("");
-    return getValidationQueue(signal)
+    return getValidationQueue({ signal })
       .then((response) => setQueue(response.data))
       .catch((err: unknown) => {
         if (isCanceledError(err)) return;
