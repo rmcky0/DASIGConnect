@@ -2,6 +2,7 @@ import { useRef } from "react";
 import type { SubmissionMediaItem } from "../../types/media";
 import { useMediaLibraryAssets } from "../../hooks/useMediaLibraryAssets";
 import MediaAssetGrid, { type GridAsset } from "./MediaAssetGrid";
+import BrandedSelect from "../ui/BrandedSelect";
 
 interface MediaLibraryTabProps {
   alreadyAddedIds: Set<string>;
@@ -96,29 +97,23 @@ export default function MediaLibraryTab({
           )}
         </div>
 
-        <select
+        <BrandedSelect
           className="mlt-select"
           value={aiCategory}
-          onChange={(e) => setAiCategory(e.target.value)}
-          aria-label="Filter by category"
+          options={CATEGORY_OPTIONS}
+          onChange={setAiCategory}
+          ariaLabel="Filter by category"
           disabled={disabled}
-        >
-          {CATEGORY_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+        />
 
-        <select
+        <BrandedSelect
           className="mlt-select"
           value={mediaType}
-          onChange={(e) => setMediaType(e.target.value as "" | "image" | "video")}
-          aria-label="Filter by media type"
+          options={MEDIA_TYPE_OPTIONS}
+          onChange={(value) => setMediaType(value as "" | "image" | "video")}
+          ariaLabel="Filter by media type"
           disabled={disabled}
-        >
-          {MEDIA_TYPE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+        />
       </div>
 
       {totalCount > 0 && (
