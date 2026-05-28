@@ -569,6 +569,21 @@ body {
   opacity: 0.35;
   cursor: not-allowed;
 }
+.btn-primary[aria-busy="true"]:disabled {
+  opacity: 0.85;
+  cursor: wait;
+}
+.auth-btn-spinner {
+  animation: auth-btn-spin 0.7s linear infinite;
+}
+@keyframes auth-btn-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
 .btn-ghost {
   width: 100%;
   background: transparent;
@@ -1036,6 +1051,84 @@ body {
   text-align: center;
   line-height: 1.55;
   margin-bottom: 22px;
+}
+
+#session-modal .modal-card {
+  background: #112347;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  color: #f0f4ff;
+}
+
+#session-modal .modal-title {
+  color: #f0f4ff;
+}
+
+#session-modal .modal-desc,
+#session-modal .flabel,
+#session-modal .eye-btn {
+  color: #7a90b8;
+}
+
+#session-modal .finput {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  color: #f0f4ff;
+}
+
+#session-modal .finput::placeholder {
+  color: rgba(122, 144, 184, 0.4);
+}
+
+#session-modal .finput:focus {
+  border-color: #1877f2;
+  box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.12);
+}
+
+#session-modal .finput:disabled,
+#session-modal .eye-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+#session-modal .eye-btn:hover {
+  color: #f0f4ff;
+}
+
+#session-modal .btn-primary {
+  background: #1877f2;
+  color: #fff;
+}
+
+#session-modal .btn-primary:hover:not(:disabled) {
+  background: #1565d8;
+}
+
+#session-modal .session-signout-btn {
+  color: #7a90b8;
+  border-color: rgba(255, 255, 255, 0.13);
+  margin-top: 10px;
+}
+
+#session-modal .session-signout-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #f0f4ff;
+}
+
+#session-modal .btn-primary:disabled,
+#session-modal .session-signout-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+#session-modal .alert-err {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fda4a4;
+}
+
+#session-modal .alert-err i {
+  color: #ef4444;
 }
 
 #screen-dashboard {
