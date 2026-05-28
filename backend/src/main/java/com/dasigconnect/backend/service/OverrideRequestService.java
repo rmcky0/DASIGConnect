@@ -41,6 +41,7 @@ public class OverrideRequestService {
 
 
     private final OverrideRequestRepository overrideRequestRepository;
+    @SuppressWarnings("unused")
     private final SubmissionRepository submissionRepository;
     private final UserRepository userRepository;
     private final SlotReservationService slotReservationService;
