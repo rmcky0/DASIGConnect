@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import {
   approveTimeout,
   deferTimeout,
@@ -28,6 +28,14 @@ function contributorName(item: TimeoutEscalation) {
 
 interface UrgencyPillProps { scheduledAt: string | null }
 function UrgencyPill({ scheduledAt }: UrgencyPillProps) {
+  const [, setTick] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    timerRef.current = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
   const mins = minutesUntil(scheduledAt);
   if (mins <= 0) return <span className="rc-urgency rc-urgency-red">Overdue</span>;
   if (mins < 10) return <span className="rc-urgency rc-urgency-red">{mins}m left</span>;
@@ -37,7 +45,7 @@ function UrgencyPill({ scheduledAt }: UrgencyPillProps) {
 
 interface Props {
   refreshSignal: number;
-  onCountChange: (n: number) => void;
+  onCountChange?: (n: number) => void;
 }
 
 export default function ValidationTimeoutTab({ refreshSignal, onCountChange }: Props) {
@@ -54,7 +62,7 @@ export default function ValidationTimeoutTab({ refreshSignal, onCountChange }: P
     getTimeoutEscalations(signal)
       .then((res) => {
         setItems(res.data);
-        onCountChange(res.data.length);
+        onCountChange?.(res.data.length);
       })
       .catch((err: unknown) => {
         if ((err as { name?: string }).name === "CanceledError") return;
@@ -176,8 +184,9 @@ export default function ValidationTimeoutTab({ refreshSignal, onCountChange }: P
                       disabled={isBusy}
                       onClick={() => void handleApprove(item)}
                       title="Approve as fallback Validator"
+                      aria-label={`Approve "${item.eventTitle}" as fallback Validator`}
                     >
-                      {isBusy ? <div className="spinner-ring spinner-ring-xs" /> : <i className="ti ti-check" />}
+                      {isBusy ? <div className="spinner-ring spinner-ring-xs" /> : <i className="ti ti-check" aria-hidden="true" />}
                       Approve
                     </button>
                     <button
@@ -186,8 +195,9 @@ export default function ValidationTimeoutTab({ refreshSignal, onCountChange }: P
                       disabled={isBusy}
                       onClick={() => void handleDefer(item)}
                       title="Defer — move to NEEDS_REVISION"
+                      aria-label={`Defer "${item.eventTitle}" — notify Contributor to resubmit`}
                     >
-                      <i className="ti ti-clock-pause" />
+                      <i className="ti ti-clock-pause" aria-hidden="true" />
                       Defer
                     </button>
                     <button
@@ -196,8 +206,9 @@ export default function ValidationTimeoutTab({ refreshSignal, onCountChange }: P
                       disabled={isBusy}
                       onClick={() => setRejectTarget(item)}
                       title="Reject on behalf"
+                      aria-label={`Reject "${item.eventTitle}" on behalf of Validator`}
                     >
-                      <i className="ti ti-x" />
+                      <i className="ti ti-x" aria-hidden="true" />
                       Reject
                     </button>
                   </td>

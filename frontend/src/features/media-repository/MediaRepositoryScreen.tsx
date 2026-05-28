@@ -242,8 +242,12 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
 
   function handleNewPost() {
     const ids = activeAssetIds();
-    if (ids.length === 0) return;
-    navigate(`/submissions/new?assetIds=${encodeURIComponent(ids.join(","))}`);
+    if (isAdmin) {
+      const base = "/admin/resolution?tab=direct-post";
+      navigate(ids.length > 0 ? `${base}&assetIds=${encodeURIComponent(ids.join(","))}` : base);
+    } else {
+      navigate(ids.length > 0 ? `/submissions/new?assetIds=${encodeURIComponent(ids.join(","))}` : "/submissions/new");
+    }
   }
 
   function openAddToDraft() {
@@ -474,10 +478,10 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
           </button>
           <button
             className="med-btn med-btn-primary med-btn-sm"
-            onClick={() => navigate("/submissions/new")}
+            onClick={() => isAdmin ? navigate("/admin/resolution?tab=direct-post") : navigate("/submissions/new")}
             type="button"
           >
-            New Submission
+            {isAdmin ? "Direct Post" : "New Submission"}
           </button>
         </div>
       </div>
@@ -584,6 +588,7 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
       <AssetDetailPanel
         asset={selectedAsset}
         open={panelOpen}
+        isAdmin={isAdmin}
         selectionMode={selectionMode}
         selectedAssets={selectedAssets}
         onViewAsset={(a) => openAsset(a)}

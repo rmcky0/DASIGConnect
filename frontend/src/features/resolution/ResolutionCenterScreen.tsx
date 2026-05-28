@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { User } from "../../types/auth.types";
 import { useResolutionCounts } from "../../hooks/useResolutionCounts";
 import { useResolutionFailures } from "../../hooks/useResolutionFailures";
@@ -33,12 +34,26 @@ interface ResolutionCenterScreenProps {
 }
 
 export default function ResolutionCenterScreen({ user }: ResolutionCenterScreenProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("failures");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "timeouts" || tab === "overrides" || tab === "direct-post" || tab === "system") return tab;
+    return "failures";
+  });
+  const [directPostAssetIds] = useState<string[]>(() => {
+    const raw = searchParams.get("assetIds");
+    return raw ? raw.split(",").filter(Boolean) : [];
+  });
   const [refreshSignal, setRefreshSignal] = useState(0);
-  const [timeoutCount, setTimeoutCount] = useState(0);
-  const [overrideCount, setOverrideCount] = useState(0);
   const [tokenIssueCount, setTokenIssueCount] = useState(0);
   const tokenSectionRef = useRef<HTMLElement>(null);
+
+  // Clear query params from the URL once consumed so the URL stays clean
+  useEffect(() => {
+    if (searchParams.has("tab") || searchParams.has("assetIds")) {
+      setSearchParams({}, { replace: true });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = useResolutionCounts(refreshSignal);
 
@@ -73,8 +88,8 @@ export default function ResolutionCenterScreen({ user }: ResolutionCenterScreenP
 
   const tabs: TabDef[] = [
     { id: "failures",     label: "API Failures",        icon: "ti-alert-circle",    count: counts.failures },
-    { id: "timeouts",     label: "Validation Timeouts", icon: "ti-clock-exclamation", count: timeoutCount },
-    { id: "overrides",    label: "Override Requests",   icon: "ti-shield-exclamation", count: overrideCount },
+    { id: "timeouts",     label: "Validation Timeouts", icon: "ti-clock-exclamation", count: counts.timeouts },
+    { id: "overrides",    label: "Override Requests",   icon: "ti-shield-exclamation", count: counts.overrides },
     { id: "direct-post",  label: "Direct Post",         icon: "ti-bolt" },
     { id: "system",       label: "System & Audit",      icon: "ti-key",             count: tokenIssueCount },
   ];
@@ -86,7 +101,7 @@ export default function ResolutionCenterScreen({ user }: ResolutionCenterScreenP
         <div>
           <h1 className="screen-title">Resolution Center</h1>
           <p className="screen-subtitle">
-            Administrator exception-handling hub — UC-3.5
+            Handle API failures, validation timeouts, guard-rail overrides, and direct posts
           </p>
         </div>
         <button type="button" className="btn-secondary" onClick={refresh} disabled={failLoading}>
@@ -100,9 +115,11 @@ export default function ResolutionCenterScreen({ user }: ResolutionCenterScreenP
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            id={`rc-tab-${tab.id}`}
             type="button"
             role="tab"
             aria-selected={activeTab === tab.id}
+            aria-controls="rc-tab-panel"
             className={`rc-tab${activeTab === tab.id ? " rc-tab-active" : ""}`}
             onClick={() => setActiveTab(tab.id)}
           >
@@ -118,7 +135,7 @@ export default function ResolutionCenterScreen({ user }: ResolutionCenterScreenP
       </div>
 
       {/* ── Tab panels ── */}
-      <div className="rc-tab-panel" role="tabpanel">
+      <div id="rc-tab-panel" className="rc-tab-panel" role="tabpanel" aria-labelledby={`rc-tab-${activeTab}`}>
 
         {/* Tab 1 — API Failures (UC-3.4 extended) */}
         {activeTab === "failures" && (
@@ -162,22 +179,16 @@ export default function ResolutionCenterScreen({ user }: ResolutionCenterScreenP
 
         {/* Tab 2 — Validation Timeouts */}
         {activeTab === "timeouts" && (
-          <ValidationTimeoutTab
-            refreshSignal={refreshSignal}
-            onCountChange={setTimeoutCount}
-          />
+          <ValidationTimeoutTab refreshSignal={refreshSignal} />
         )}
 
         {/* Tab 3 — Override Requests */}
         {activeTab === "overrides" && (
-          <OverrideRequestsTab
-            refreshSignal={refreshSignal}
-            onCountChange={setOverrideCount}
-          />
+          <OverrideRequestsTab refreshSignal={refreshSignal} />
         )}
 
         {/* Tab 4 — Direct Post */}
-        {activeTab === "direct-post" && <DirectPostTab />}
+        {activeTab === "direct-post" && <DirectPostTab initialAssetIds={directPostAssetIds} />}
 
         {/* Tab 5 — System & Audit */}
         {activeTab === "system" && (

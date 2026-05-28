@@ -1,119 +1,76 @@
-# Handoff - 2026-05-28 (Session 9)
+# Handoff - 2026-05-29 (Session 10)
 
 ## What Was Done This Session
 
-- **AI Media Library upgrade docs were reviewed and corrected.**
-  - Updated `docs/md/ai-media-library-upgrade.md` with the main pre-implementation fixes:
-    - removed duplicate artwork examples,
-    - added `ai_tags` to the Claude JSON shape,
-    - clarified `ai_caption` / `ai_tags` storage,
-    - fixed `embedding_type` vs `type`,
-    - clarified Voyage image vs text embedding usage,
-    - added `ma.status = 'READY'` and `deleted_at IS NULL` filtering,
-    - added unique `(asset_id, embedding_type)` index and upsert guidance,
-    - expanded soft-delete/hard-delete cleanup,
-    - added migration safety notes.
+### Task 1 — Admin "New Submission" → "Direct Post"
+- **`MediaRepositoryScreen.tsx`** header button: admin sees "Direct Post", contributor sees "New Submission".
+- **`AssetDetailPanel.tsx`** sidebar action button: added `isAdmin` prop; admin sees "Direct Post (N)", contributor sees "New Submission (N)". Prop is passed from `MediaRepositoryScreen`.
 
-- **AI Media Library backend implementation started from the MD basis.**
-  - Added dual embedding support with `media_asset_embeddings`.
-  - Added media asset status lifecycle: `PROCESSING`, `READY`, `FAILED`, `DELETED`.
-  - Claude classification now returns richer structured media metadata including `ai_tags`.
-  - Voyage integration separates multimodal image embedding from text/semantic embedding.
-  - AI suggestion search now excludes deleted/non-ready media assets.
-  - Soft delete cleanup now clears embeddings/tags and marks media deleted.
-  - Added Flyway migration `V25__media_asset_dual_embeddings.sql`.
+### Task 2 — Wire Admin Direct Post to Resolution Center
+- **`MediaRepositoryScreen.tsx` `handleNewPost()`**: admin navigates to `/admin/resolution?tab=direct-post`; with selected assets appends `&assetIds=id1,id2,...`. Contributors still go to `/submissions/new`.
+- **`ResolutionCenterScreen.tsx`**: reads `tab` and `assetIds` from query params on mount (`useSearchParams`). `tab` pre-selects the active tab; `assetIds` is passed as `initialAssetIds` prop to `DirectPostTab`. Query params are cleared from URL (`replace: true`) after consuming.
+- **`DirectPostTab.tsx`**: accepts `initialAssetIds?: string[]` prop; initializes `mediaAssetIds` state from it. Assets are sent in the API payload as `mediaAssetIds`.
 
-- **Submit Content UX updates.**
-  - Submission wizard step order changed to:
-    1. Post Details
-    2. Media Assets
-    3. Preferred Schedule
-  - New and loaded drafts open on Post Details first so title/caption/tags exist before AI media suggestion.
-  - Back navigation no longer asks to save when the draft is already saved.
-  - Back navigation still prompts when there are unsaved draft changes.
-  - Local file input can reselect the same batch after selection.
-  - Media Repository upload modal now supports selecting/dropping multiple local assets and uploads them sequentially with aggregate progress.
+### Task 3 — Reuse Date Picker From Content Submission
+- Extracted `CalendarDateField`, `TimePickerField`, and `TimeStepper` from `SubmissionScreen.tsx` into:
+  - `frontend/src/components/form/dateTimeHelpers.ts` — pure helper functions (no React; satisfies `react-refresh/only-export-components`)
+  - `frontend/src/components/form/DateTimePicker.tsx` — the three React components only
+- `SubmissionScreen.tsx` now imports from the shared file; local definitions removed.
+- `DirectPostTab.tsx` replaced native `<input type="datetime-local">` with `CalendarDateField` + `TimePickerField` in a `rc-dp-datetime-row` flex row.
 
-- **Duplicate Facebook publish bug diagnosed and fixed.**
-  - Supabase showed duplicate successful publication attempts:
-    - `2c405cb4-1d0d-4e52-a7be-8a9c0fd92a73`
-    - `d3ab4d3b-af1a-420c-b76c-a6f71802bb7a`
-  - Root cause: `PublishingSchedulerJob` could pick the same `scheduled` submission in overlapping scheduler runs or app instances before the first run updated it to `published`.
-  - Fix: added an atomic publish-claim step before Facebook API calls:
-    - `scheduled -> publishing`
-    - `direct_post_scheduled -> direct_post_publishing`
-  - Only the process that successfully updates the DB row can publish. Later overlapping runs skip the row.
-  - Immediate direct posts now use the same claim flow to avoid racing the scheduler.
-  - Added Flyway migration `V26__submission_publishing_claim_status.sql`.
+### Task 4 — Component Reuse
+- Handled by extraction above. No new duplicates introduced.
 
-## Files Changed This Session
+### Task 5 — Network View Assessment
+- Network view IS connected to real data: it changes the asset fetch scope (`useMediaAssets(networkView, ...)`) and shows institution chips per card.
+- Decision: **kept** — serves a genuine admin purpose (cross-institution asset browsing + access audit log).
 
-**Backend:**
-- `backend/src/main/java/com/dasigconnect/backend/model/entity/SubmissionStatus.java`
-- `backend/src/main/java/com/dasigconnect/backend/repository/SubmissionRepository.java`
-- `backend/src/main/java/com/dasigconnect/backend/schedule/PublishingSchedulerJob.java`
-- `backend/src/main/java/com/dasigconnect/backend/service/PublishingQueryService.java`
-- `backend/src/main/java/com/dasigconnect/backend/service/FacebookPublisherService.java`
-- `backend/src/main/java/com/dasigconnect/backend/service/DirectPostService.java`
-- `backend/src/main/resources/db/migration/V26__submission_publishing_claim_status.sql`
-- `backend/src/test/java/com/dasigconnect/backend/schedule/PublishingSchedulerJobTest.java`
-- `backend/src/test/java/com/dasigconnect/backend/service/PublishingQueryServiceTest.java`
+### Task 6 — Wire Direct Post Media Assets
+- `DirectPostTab.tsx` shows a blue badge "N assets selected from Media Library" when `mediaAssetIds` is non-empty.
+- Clear button removes all attached assets from the payload.
+- Preview panel shows "N media assets attached" note when assets are present.
+- `scheduledAt` is now computed from `scheduledDate` + `scheduledTime` (YYYY-MM-DD + HH:MM → ISO string), matching the Content Submission contract.
 
-**AI Media backend work from this session:**
-- `backend/src/main/resources/db/migration/V25__media_asset_dual_embeddings.sql`
-- `backend/src/main/java/com/dasigconnect/backend/model/entity/MediaAssetEmbedding.java`
-- `backend/src/main/java/com/dasigconnect/backend/model/entity/MediaAssetEmbeddingType.java`
-- `backend/src/main/java/com/dasigconnect/backend/model/entity/MediaAssetStatus.java`
-- `backend/src/main/java/com/dasigconnect/backend/repository/MediaAssetEmbeddingRepository.java`
-- plus updates to Claude/Voyage clients, media asset services, recommendation service, retention service, and related tests.
+### Task 7 — UI Enhancement
+- Added CSS to `resolution.css`:
+  - `.rc-dp-datetime-row` — flex row for CalendarDateField + TimePickerField side-by-side
+  - `.rc-dp-media-badge` — blue accent badge for attached assets with clear button
+  - `.rc-dp-preview-media-note` — media count note in preview card
 
-**Frontend:**
-- `frontend/src/api/submissionApi.ts`
-- `frontend/src/components/media/UploadMediaTab.tsx`
-- `frontend/src/features/media-repository/components/UploadModal.tsx`
-- `frontend/src/features/submission/SubmissionScreen.tsx`
+## Files Changed
 
-**Docs:**
-- `docs/md/ai-media-library-upgrade.md`
-- `HANDOFF.md`
-- `CLAUDE.md`
-- `TASKS.md`
+**New files:**
+- `frontend/src/components/form/dateTimeHelpers.ts`
+- `frontend/src/components/form/DateTimePicker.tsx`
+
+**Modified files:**
+- `frontend/src/features/submission/SubmissionScreen.tsx` — removed local CalendarDateField, TimePickerField, TimeStepper, usePopoverCollision, and 10 helper functions; imports from shared DateTimePicker.tsx
+- `frontend/src/features/resolution/DirectPostTab.tsx` — new initialAssetIds prop, shared date pickers, media badge UI
+- `frontend/src/features/resolution/ResolutionCenterScreen.tsx` — useSearchParams for tab/assetIds deep-link; passes initialAssetIds to DirectPostTab
+- `frontend/src/features/media-repository/MediaRepositoryScreen.tsx` — role-aware header button and handleNewPost routing
+- `frontend/src/features/media-repository/components/AssetDetailPanel.tsx` — isAdmin prop, conditional button label
+- `frontend/src/styles/resolution.css` — new datetime-row, media-badge, preview-media-note styles
 
 ## Verification
-
-- Backend full test suite:
-  - `.\mvnw.cmd test`
-  - Result: **273 tests, 0 failures, 0 errors**
-- Focused publish-claim tests:
-  - `.\mvnw.cmd test "-Dtest=PublishingQueryServiceTest,PublishingSchedulerJobTest"`
-  - Result: **4 tests, 0 failures**
-- Frontend production build:
-  - `npm.cmd run build`
-  - Result: **passed**
-  - Existing Vite chunk-size warning remains.
-
-## Important Notes
-
-- Existing duplicate Facebook posts already created for the two affected submissions must be cleaned manually from Facebook if needed. The backend fix prevents future duplicate publishes but cannot remove already-created posts.
-- Apply Flyway migrations on backend restart before browser E2E:
-  - `V25__media_asset_dual_embeddings.sql`
-  - `V26__submission_publishing_claim_status.sql`
-- During AI media implementation, do **not** delete the old `media_assets.embedding` column immediately. The migration strategy keeps old and new embedding paths compatible while search is moved to `media_asset_embeddings`.
-- For AI features in Submit Content, saving a draft first is intentional because the backend needs a stable `submissionId` and saved media/context before running AI caption and AI media suggestion flows.
+- `npm.cmd run build`: **227 modules, 0 TypeScript errors** ✓
+- `npx.cmd eslint --quiet` on all 7 changed/new files: **0 errors, 0 warnings** ✓
 
 ## What's Next
 
-1. Restart backend so Flyway applies V25 and V26.
-2. Run browser E2E for:
-   - Submit Content step order and draft-exit prompt behavior.
-   - Multi-file local upload from Submit Content and Media Repository.
-   - AI Caption after saving draft.
-   - AI Media Suggestions after title/caption/tags exist and draft is saved.
-   - Scheduled Facebook publishing once, confirming only one `publication_attempts.result = 'success'` row per submission.
-3. In Supabase, optionally audit current duplicates:
-   ```sql
-   SELECT submission_id, result, COUNT(*)
-   FROM publication_attempts
-   GROUP BY submission_id, result
-   HAVING COUNT(*) > 1;
-   ```
+1. **Browser E2E — Admin Direct Post from Media Library:**
+   - Login as admin → Media Library → select 1–3 assets → click "Direct Post"
+   - Confirm routed to Resolution Center with Direct Post tab active and asset badge showing correct count
+   - Fill caption/reason/institution → click "Publish Now" → confirm API call includes `mediaAssetIds`
+
+2. **Browser E2E — Direct Post without assets:**
+   - Navigate directly to `/admin/resolution` → click "Direct Post" tab → form should be empty (no badge)
+   - Schedule for later → confirm CalendarDateField + TimePickerField work (same UX as Content Submission)
+
+3. **Browser E2E — Contributor isolation:**
+   - Login as contributor → Media Library → select assets → "New Submission" button still routes to `/submissions/new?assetIds=...` (not Resolution Center)
+
+4. **Apply pending Flyway migrations** (if not already done):
+   - V24 (UC-3.5 override requests), V25 (dual embeddings), V26 (publishing claim statuses)
+   - Backend restart triggers Flyway automatically
+
+5. **Known open gap:** `ManualPublishDetail` TypeScript interface still missing `lastManualPublishAbandonedAt: string | null` — re-add before browser testing UC-3.4 abandonment banner.

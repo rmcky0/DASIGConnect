@@ -3,77 +3,93 @@ import { api } from "../../api/authApi";
 import { createDirectPost } from "../../api/resolutionApi";
 import { useToast } from "../../context/ToastContext";
 import type { InstitutionResponse } from "../../api/authApi";
+import { CalendarDateField, TimePickerField } from "../../components/form/DateTimePicker";
+import { dateToInputValue, timePartsToValue, parseTimeValue } from "../../components/form/dateTimeHelpers";
 
 const CAPTION_MIN = 80;
 const CAPTION_MAX = 280;
 const REASON_MIN = 20;
 
-function nowPlusTwoHours() {
-  return new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16);
+function defaultScheduleDate() {
+  const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  return dateToInputValue(d);
 }
 
-export default function DirectPostTab() {
+function defaultScheduleTime() {
+  const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const parts = parseTimeValue(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+  return timePartsToValue(parts);
+}
+
+interface DirectPostTabProps {
+  initialAssetIds?: string[];
+}
+
+export default function DirectPostTab({ initialAssetIds = [] }: DirectPostTabProps) {
   const toast = useToast();
   const [institutions, setInstitutions] = useState<InstitutionResponse[]>([]);
+  const [institutionsLoading, setInstitutionsLoading] = useState(true);
   const [institutionId, setInstitutionId] = useState("");
   const [caption, setCaption] = useState("");
   const [publishImmediately, setPublishImmediately] = useState(true);
-  const [scheduledAt, setScheduledAt] = useState(nowPlusTwoHours());
+  const [scheduledDate, setScheduledDate] = useState(defaultScheduleDate);
+  const [scheduledTime, setScheduledTime] = useState(defaultScheduleTime);
   const [reason, setReason] = useState("");
   const [acknowledgedGrH1, setAcknowledgedGrH1] = useState(false);
   const [busy, setBusy] = useState(false);
   const [grH1Warning, setGrH1Warning] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [mediaAssetIds, setMediaAssetIds] = useState<string[]>(initialAssetIds);
 
   useEffect(() => {
     api.get<InstitutionResponse[]>("/institutions")
-      .then((res) => setInstitutions(res.data.filter((i) => i.status === "ACTIVE")))
-      .catch(() => {});
+      .then((res) => setInstitutions(res.data.filter((i) => i.status === "active")))
+      .catch(() => {})
+      .finally(() => setInstitutionsLoading(false));
   }, []);
 
   const captionLen = caption.length;
   const reasonLen = reason.trim().length;
   const captionValid = captionLen >= CAPTION_MIN && captionLen <= CAPTION_MAX;
   const reasonValid = reasonLen >= REASON_MIN;
-  const scheduleValid = publishImmediately || scheduledAt !== "";
-  const canSubmit =
-    institutionId !== "" &&
-    captionValid &&
-    reasonValid &&
-    scheduleValid &&
-    !busy;
+  const scheduleValid = publishImmediately || (scheduledDate !== "" && scheduledTime !== "");
+  const canSubmit = !institutionsLoading && institutionId !== "" && captionValid && reasonValid && scheduleValid && !busy;
+
+  function buildScheduledAt() {
+    if (publishImmediately || !scheduledDate || !scheduledTime) return undefined;
+    return new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
+  }
 
   async function handleSubmit() {
     if (!canSubmit) return;
     setBusy(true);
     setGrH1Warning(false);
     try {
-      const payload = {
+      const res = await createDirectPost({
         institutionId,
         caption,
-        mediaAssetIds: [] as string[],
+        mediaAssetIds,
         publishImmediately,
-        scheduledAt: publishImmediately ? undefined : new Date(scheduledAt).toISOString(),
+        scheduledAt: buildScheduledAt(),
         reason: reason.trim(),
         acknowledgedGrH1Conflict: acknowledgedGrH1,
-      };
-      const res = await createDirectPost(payload);
-      if (res.data.grH1ConflictWarning) {
-        setGrH1Warning(true);
-      }
+      });
+      if (res.data.grH1ConflictWarning) setGrH1Warning(true);
       setSubmitted(true);
       toast.success(
         publishImmediately
           ? "Direct post submitted — publishing to Facebook now."
           : "Direct post scheduled successfully.",
       );
-      // reset form
+      // reset
       setInstitutionId("");
       setCaption("");
       setReason("");
       setPublishImmediately(true);
-      setScheduledAt(nowPlusTwoHours());
+      setScheduledDate(defaultScheduleDate());
+      setScheduledTime(defaultScheduleTime());
       setAcknowledgedGrH1(false);
+      setMediaAssetIds([]);
     } catch {
       toast.error("Direct post failed. Please check your inputs and try again.");
     } finally {
@@ -109,8 +125,9 @@ export default function DirectPostTab() {
               className="rc-select"
               value={institutionId}
               onChange={(e) => setInstitutionId(e.target.value)}
+              disabled={institutionsLoading}
             >
-              <option value="">Select institution...</option>
+              <option value="">{institutionsLoading ? "Loading institutions…" : "Select institution..."}</option>
               {institutions.map((i) => (
                 <option key={i.id} value={i.id}>{i.name}</option>
               ))}
@@ -142,6 +159,26 @@ export default function DirectPostTab() {
             )}
           </div>
 
+          {/* Media assets */}
+          {mediaAssetIds.length > 0 && (
+            <div className="rc-field">
+              <label className="rc-label">Attached media</label>
+              <div className="rc-dp-media-badge">
+                <i className="ti ti-photo" aria-hidden="true" />
+                <span>{mediaAssetIds.length} asset{mediaAssetIds.length !== 1 ? "s" : ""} selected from Media Library</span>
+                <button
+                  type="button"
+                  className="rc-dp-media-clear"
+                  onClick={() => setMediaAssetIds([])}
+                  aria-label="Remove all attached assets"
+                >
+                  <i className="ti ti-x" aria-hidden="true" />
+                </button>
+              </div>
+              <span className="rc-hint">Assets will be attached to this direct post in their selected order.</span>
+            </div>
+          )}
+
           <div className="rc-field">
             <label className="rc-label">Publication timing <span className="rc-required">*</span></label>
             <div className="rc-toggle-group">
@@ -163,13 +200,18 @@ export default function DirectPostTab() {
               </button>
             </div>
             {!publishImmediately && (
-              <input
-                type="datetime-local"
-                className="rc-input"
-                min={nowPlusTwoHours()}
-                value={scheduledAt}
-                onChange={(e) => setScheduledAt(e.target.value)}
-              />
+              <div className="rc-dp-datetime-row">
+                <CalendarDateField
+                  value={scheduledDate}
+                  placeholder="Select date"
+                  onChange={setScheduledDate}
+                />
+                <TimePickerField
+                  value={scheduledTime}
+                  placeholder="Select time"
+                  onChange={setScheduledTime}
+                />
+              </div>
             )}
           </div>
 
@@ -265,19 +307,23 @@ export default function DirectPostTab() {
                     <div className="rc-dp-preview-time">
                       {publishImmediately
                         ? "Just now"
-                        : scheduledAt
-                          ? new Date(scheduledAt).toLocaleDateString("en-PH", { month: "short", day: "numeric" })
+                        : scheduledDate
+                          ? new Date(`${scheduledDate}T${scheduledTime || "00:00"}`).toLocaleDateString("en-PH", { month: "short", day: "numeric" })
                           : "Scheduled"}
                     </div>
                   </div>
                 </div>
                 <p className="rc-dp-preview-caption">{caption}</p>
+                {mediaAssetIds.length > 0 && (
+                  <div className="rc-dp-preview-media-note">
+                    <i className="ti ti-photo" aria-hidden="true" />
+                    {mediaAssetIds.length} media asset{mediaAssetIds.length !== 1 ? "s" : ""} attached
+                  </div>
+                )}
                 {institutionId && (
                   <div className="rc-dp-preview-attr">
                     Posted on behalf of{" "}
-                    <strong>
-                      {institutions.find((i) => i.id === institutionId)?.name ?? "—"}
-                    </strong>
+                    <strong>{institutions.find((i) => i.id === institutionId)?.name ?? "—"}</strong>
                   </div>
                 )}
               </div>

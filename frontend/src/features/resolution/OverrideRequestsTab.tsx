@@ -28,7 +28,7 @@ function isExpired(requestedSlot: string) {
 
 interface Props {
   refreshSignal: number;
-  onCountChange: (n: number) => void;
+  onCountChange?: (n: number) => void;
 }
 
 export default function OverrideRequestsTab({ refreshSignal, onCountChange }: Props) {
@@ -47,7 +47,7 @@ export default function OverrideRequestsTab({ refreshSignal, onCountChange }: Pr
       .then((res) => {
         setItems(res.data);
         const active = res.data.filter((r) => !isExpired(r.requestedSlot)).length;
-        onCountChange(active);
+        onCountChange?.(active);
       })
       .catch((err: unknown) => {
         if ((err as { name?: string }).name === "CanceledError") return;
@@ -174,8 +174,9 @@ export default function OverrideRequestsTab({ refreshSignal, onCountChange }: Pr
               disabled={isBusy}
               onClick={() => void handleApprove(item)}
               title="Approve override — bypass guard rail for this submission"
+              aria-label={`Approve override for "${item.eventTitle}"`}
             >
-              {isBusy ? <div className="spinner-ring spinner-ring-xs" /> : <i className="ti ti-check" />}
+              {isBusy ? <div className="spinner-ring spinner-ring-xs" /> : <i className="ti ti-check" aria-hidden="true" />}
               Approve
             </button>
             <button
@@ -184,8 +185,9 @@ export default function OverrideRequestsTab({ refreshSignal, onCountChange }: Pr
               disabled={isBusy}
               onClick={() => setSuggestTarget(item)}
               title="Suggest an alternative compliant slot"
+              aria-label={`Suggest alternative slot for "${item.eventTitle}"`}
             >
-              <i className="ti ti-calendar-plus" />
+              <i className="ti ti-calendar-plus" aria-hidden="true" />
               Suggest
             </button>
             <button
@@ -194,8 +196,9 @@ export default function OverrideRequestsTab({ refreshSignal, onCountChange }: Pr
               disabled={isBusy}
               onClick={() => setDenyTarget(item)}
               title="Deny this override request"
+              aria-label={`Deny override request for "${item.eventTitle}"`}
             >
-              <i className="ti ti-x" />
+              <i className="ti ti-x" aria-hidden="true" />
               Deny
             </button>
           </td>
@@ -261,6 +264,7 @@ export default function OverrideRequestsTab({ refreshSignal, onCountChange }: Pr
       )}
 
       <SlotSuggestionModal
+        key={suggestTarget?.id ?? "none"}
         request={suggestTarget}
         busy={suggestTarget ? busy === suggestTarget.id : false}
         onConfirm={handleSuggestConfirm}

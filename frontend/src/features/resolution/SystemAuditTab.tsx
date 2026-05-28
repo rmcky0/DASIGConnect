@@ -215,12 +215,11 @@ export default function SystemAuditTab({ refreshSignal, onIssueCount, tokenSecti
         </div>
 
         <div className="rc-audit-placeholder">
-          <i className="ti ti-database" aria-hidden="true" />
-          <span>Audit log viewer</span>
+          <i className="ti ti-clipboard-list" aria-hidden="true" />
+          <span>Audit log viewer coming soon</span>
           <p>
-            The filterable audit log endpoint is available from the Analytics Dashboard
-            under Administrator workload metrics, or directly from the backend at{" "}
-            <code>/api/v1/audit-log</code>.
+            Administrator exception-handling actions are recorded in the immutable audit log.
+            Review them under <strong>Analytics → Administrator Workload</strong>.
           </p>
         </div>
       </section>

@@ -5,6 +5,7 @@ import { formatFileSize, formatUploadDate, formatResolution, formatFileTypeName,
 interface AssetDetailPanelProps {
   asset: MediaAsset | null;
   open: boolean;
+  isAdmin?: boolean;
   selectionMode?: boolean;
   selectedAssets?: MediaAsset[];
   canAddToDraft?: boolean;
@@ -45,6 +46,7 @@ const submissionStatusBadge: Record<string, string> = {
 export default function AssetDetailPanel({
   asset,
   open,
+  isAdmin = false,
   selectionMode = false,
   selectedAssets = [],
   canAddToDraft = false,
@@ -314,7 +316,7 @@ export default function AssetDetailPanel({
           type="button"
           style={{ width: "100%", justifyContent: "center" }}
         >
-          New Submission ({newPostCount})
+          {isAdmin ? "Direct Post" : "New Submission"} ({newPostCount})
         </button>
       </div>
       )}

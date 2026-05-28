@@ -548,6 +548,78 @@
   padding-top: 8px;
   margin-top: 4px;
 }
+.rc-dp-preview-media-note {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--d-muted);
+  margin-top: 6px;
+}
+
+/* ── Direct Post datetime row ──
+   Bridge --sub-* tokens used by the shared CalendarDateField/TimePickerField
+   components. Those tokens are normally scoped to .submission-screen, so we
+   re-declare them here using the Resolution Center design tokens. */
+.rc-dp-datetime-row {
+  --sub-surface:    var(--d-surface);
+  --sub-surface-2:  #f7f9fd;
+  --sub-border:     var(--d-border);
+  --sub-border-2:   #c8d3e8;
+  --sub-text:       var(--d-text);
+  --sub-muted:      #6a7f9a;
+  --sub-muted-2:    #a0b0c8;
+  --sub-blue:       var(--d-blue);
+  --sub-blue-2:     #1565d8;
+  --sub-blue-dim:   #eff6ff;
+  --sub-blue-bdr:   #bfdbfe;
+  --sub-gold:       var(--d-gold);
+  --sub-green:      #16a34a;
+  --sub-r:          var(--r, 10px);
+  --sub-r-sm:       7px;
+  --sub-r-lg:       14px;
+  --sub-display:    "Fraunces", Georgia, serif;
+  --sub-body:       "Plus Jakarta Sans", system-ui, sans-serif;
+
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.rc-dp-datetime-row .sub-date-field,
+.rc-dp-datetime-row .sub-time-field {
+  flex: 1;
+  min-width: 140px;
+}
+
+/* ── Direct Post media badge ── */
+.rc-dp-media-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--d-blue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--d-blue) 30%, transparent);
+  border-radius: var(--r, 8px);
+  font-size: 13px;
+  color: var(--d-text);
+}
+.rc-dp-media-badge i { color: var(--d-blue); flex-shrink: 0; }
+.rc-dp-media-badge span { flex: 1; }
+.rc-dp-media-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--d-muted);
+  flex-shrink: 0;
+}
+.rc-dp-media-clear:hover { background: var(--d-border); color: var(--d-text); }
 
 /* ── System & Audit ── */
 .rc-system-audit { display: flex; flex-direction: column; gap: 32px; }
