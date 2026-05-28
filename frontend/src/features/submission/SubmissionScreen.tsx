@@ -209,7 +209,11 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       : undefined;
   const canSubmitCurrentSubmission = form.status === "draft";
   const isReadOnlySubmission = form.status !== "draft";
+  const canUseAiCaption = !isReadOnlySubmission;
   const hasMedia = form.files.length > 0 || form.savedAssets.length > 0;
+  const hasUnsavedDraftChanges =
+    !isReadOnlySubmission &&
+    (isDirty || (saveState !== "saved" && isDirtyDraft(form)));
   const busy =
     saveState === "saving" || submitting || deleting || reorderingMedia;
 
@@ -405,7 +409,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   }
 
   function handleBack() {
-    if (!isReadOnlySubmission && isDirty) {
+    if (hasUnsavedDraftChanges) {
       setModal("draft-exit");
       return;
     }
@@ -1050,12 +1054,14 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
             <Field
               label="Caption"
               action={
-                <AiCaptionButton
-                  state={aiCaption.state}
-                  canSuggest={aiCaption.canSuggest}
-                  rateLimitReset={aiCaption.rateLimitReset}
-                  onSuggest={aiCaption.suggest}
-                />
+                canUseAiCaption ? (
+                  <AiCaptionButton
+                    state={aiCaption.state}
+                    canSuggest={aiCaption.canSuggest}
+                    rateLimitReset={aiCaption.rateLimitReset}
+                    onSuggest={aiCaption.suggest}
+                  />
+                ) : undefined
               }
             >
               <div className="sub-caption-wrapper">
@@ -1071,10 +1077,11 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                   {form.caption.length} / 500
                 </span>
               </div>
-              {aiCaption.variants && (
+              {canUseAiCaption && aiCaption.variants && (
                 <AiCaptionSuggestion
                   variants={aiCaption.variants}
                   onApply={(caption, tone, action) => {
+                    if (!canUseAiCaption) return;
                     updateField("caption", caption);
                     aiCaption.logApply(tone, action);
                   }}
