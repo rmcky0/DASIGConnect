@@ -15,7 +15,7 @@ function fileToItem(file: File): SubmissionMediaItem {
     clientId: `upload-${file.name}-${file.lastModified}-${file.size}`,
     source: "upload",
     file,
-    previewUrl: isVideo ? "" : URL.createObjectURL(file),
+    previewUrl: URL.createObjectURL(file),
     mediaType: isVideo ? "video" : "image",
     fileName: file.name,
   };

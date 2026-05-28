@@ -16,6 +16,7 @@ import InstitutionUsersCard from './components/InstitutionUsersCard'
 import InvitationComposer from './components/InvitationComposer'
 import { SkeletonBlock } from './components/LoadingPrimitives'
 import PendingInvitationsCard from './components/PendingInvitationsCard'
+import BrandedSelect from '../../components/ui/BrandedSelect'
 import type { InstitutionOption, InviteResults, InviteRole } from './types'
 import { toInstitutionOption } from './types'
 import { useToast } from '../../context/ToastContext'
@@ -363,22 +364,19 @@ export default function UserInvitationsScreen({ user }: UserInvitationsScreenPro
               {selectedInstitution?.name || 'Institution'}
             </span>
           ) : (
-            <select
+            <BrandedSelect
               className="um-inst-select"
               value={selectedInstitutionId}
-              onChange={(event) => setSelectedInstitutionId(event.target.value)}
+              onChange={setSelectedInstitutionId}
               disabled={institutions.length <= 1}
-              aria-label="Select institution"
-            >
-              {institutions.length === 0 && (
-                <option value="">No institutions available</option>
-              )}
-              {institutions.map((inst) => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name}
-                </option>
-              ))}
-            </select>
+              ariaLabel="Select institution"
+              placeholder="Select institution"
+              options={
+                institutions.length === 0
+                  ? [{ value: '', label: 'No institutions available', disabled: true }]
+                  : institutions.map((inst) => ({ value: inst.id, label: inst.name }))
+              }
+            />
           )}
         </div>
 

@@ -89,7 +89,22 @@ export default function SelectedMediaStrip({
               <div className="sms-thumb">
                 {item.mediaType === "video" ? (
                   <div className="sms-video-thumb">
-                    <i className="ti ti-video" aria-hidden />
+                    {item.previewUrl ? (
+                      <video
+                        src={item.previewUrl}
+                        className="sms-video"
+                        muted
+                        playsInline
+                        preload="metadata"
+                        draggable={false}
+                        aria-label={item.fileName}
+                      />
+                    ) : (
+                      <i className="ti ti-video" aria-hidden />
+                    )}
+                    <span className="sms-video-play" aria-hidden>
+                      <i className="ti ti-player-play-filled" />
+                    </span>
                   </div>
                 ) : (
                   <img
