@@ -183,10 +183,16 @@ public class DirectPostService {
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void publishImmediately(UUID submissionId) {
-        List<MediaAsset> assets = publishingQueryService.loadAssetsForSubmission(submissionId);
         Submission s = submissionRepository.findById(submissionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Submission not found."));
-        facebookPublisherService.publish(s, assets);
+        Submission claimed = publishingQueryService.claimForPublishing(s)
+                .orElse(null);
+        if (claimed == null) {
+            log.info("Immediate direct post {} was already claimed for publishing.", submissionId);
+            return;
+        }
+        List<MediaAsset> assets = publishingQueryService.loadAssetsForSubmission(submissionId);
+        facebookPublisherService.publish(claimed, assets);
     }
 
     /**

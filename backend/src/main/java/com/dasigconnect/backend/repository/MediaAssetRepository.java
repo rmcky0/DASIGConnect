@@ -18,6 +18,15 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
     @Query("SELECT m FROM MediaAsset m WHERE m.institution.id = :institutionId AND m.deletedAt IS NULL ORDER BY m.createdAt DESC")
     List<MediaAsset> findActiveByInstitution(@Param("institutionId") UUID institutionId);
 
+    @Query(value = """
+        SELECT * FROM media_assets
+        WHERE institution_id = :institutionId
+          AND deleted_at IS NULL
+          AND status = 'READY'
+        ORDER BY created_at DESC
+        """, nativeQuery = true)
+    List<MediaAsset> findReadyByInstitution(@Param("institutionId") UUID institutionId);
+
     @Query("SELECT m FROM MediaAsset m WHERE m.deletedAt IS NULL ORDER BY m.createdAt DESC")
     List<MediaAsset> findAllActive();
 
@@ -30,7 +39,8 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
         UPDATE media_assets
         SET embedding = CAST(:embedding AS vector),
             embedding_generated_at = NOW(),
-            embedding_model = :embeddingModel
+            embedding_model = :embeddingModel,
+            status = 'READY'
         WHERE id = :id
         """, nativeQuery = true)
     void updateEmbedding(@Param("id") UUID id,
@@ -58,19 +68,20 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
         SELECT * FROM media_assets
         WHERE institution_id = :institutionId
           AND deleted_at IS NULL
+          AND status = 'READY'
           AND embedding IS NOT NULL
         ORDER BY embedding <=> CAST(:queryVector AS vector)
         LIMIT 5
         """, nativeQuery = true)
     List<MediaAsset> findTopSimilar(@Param("institutionId") UUID institutionId, @Param("queryVector") String queryVectorJson);
 
-    @Query(value = "SELECT embedding::text FROM media_assets WHERE id = :id AND embedding IS NOT NULL", nativeQuery = true)
+    @Query(value = "SELECT embedding::text FROM media_assets WHERE id = :id AND deleted_at IS NULL AND status = 'READY' AND embedding IS NOT NULL", nativeQuery = true)
     Optional<String> findEmbeddingById(@Param("id") UUID id);
 
     @Query(value = """
         SELECT * FROM media_assets
         WHERE deleted_at IS NULL
-          AND embedding IS NULL
+          AND (status IS NULL OR status IN ('PROCESSING', 'FAILED') OR embedding IS NULL)
         LIMIT 10
         """, nativeQuery = true)
     List<MediaAsset> findNeedingEmbedding();
@@ -81,6 +92,7 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
         FROM media_assets
         WHERE institution_id = :institutionId
           AND deleted_at IS NULL
+          AND status = 'READY'
           AND embedding IS NOT NULL
         ORDER BY embedding <=> CAST(:queryVector AS vector)
         LIMIT 30
@@ -90,6 +102,11 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
 
     @Query("SELECT m FROM MediaAsset m WHERE m.id IN :ids AND m.deletedAt IS NULL")
     List<MediaAsset> findActiveByIds(@Param("ids") List<UUID> ids);
+
+    @Modifying
+    @Transactional
+    @Query(value = "UPDATE media_assets SET status = :status WHERE id = :id", nativeQuery = true)
+    void updateStatus(@Param("id") UUID id, @Param("status") String status);
 
     @Query(value = """
         SELECT * FROM media_assets
@@ -112,8 +129,17 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
             ai_category = NULL,
             ai_confidence = NULL,
             ai_description = NULL,
+            asset_type = NULL,
+            visible_objects = NULL,
+            specific_subjects = NULL,
+            visual_style = NULL,
+            dominant_colors = NULL,
+            possible_use_cases = NULL,
+            ai_tags = NULL,
+            excluded_categories = NULL,
             ai_classified_at = NULL,
             ai_classification_model = NULL,
+            reclassified_at = NULL,
             purged_at = NOW()
         WHERE id = :id
         """, nativeQuery = true)

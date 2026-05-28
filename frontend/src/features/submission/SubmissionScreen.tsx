@@ -97,10 +97,14 @@ const statusLabels: Record<SubmissionStatus, string> = {
   in_review: "Under Review",
   needs_revision: "Needs Revision",
   scheduled: "Scheduled",
+  publishing: "Publishing",
   publish_failed: "Publish Failed",
   published: "Published",
   published_manual: "Published",
   admin_direct_post: "Direct Post",
+  direct_post_scheduled: "Direct Post Scheduled",
+  direct_post_publishing: "Direct Post Publishing",
+  direct_post_failed: "Direct Post Failed",
   rejected: "Rejected",
 };
 
@@ -134,7 +138,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const [guardRailsLoading, setGuardRailsLoading] = useState(false);
   const [guardRails, setGuardRails] = useState<GuardRailResult | null>(null);
   const [guardRailError, setGuardRailError] = useState("");
-  const [activeStep, setActiveStep] = useState<ProgressStep>("media");
+  const [activeStep, setActiveStep] = useState<ProgressStep>("details");
 
   const queued = useMemo(() => {
     if (filter === "drafts")
@@ -212,17 +216,17 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const progressSteps = useMemo(
     () => [
       {
-        id: "media" as const,
-        label: "Media Assets",
-        complete: hasMedia,
-      },
-      {
         id: "details" as const,
         label: "Post Details",
         complete:
           Boolean(form.eventTitle.trim()) &&
           Boolean(form.eventDate) &&
           Boolean(form.caption.trim()),
+      },
+      {
+        id: "media" as const,
+        label: "Media Assets",
+        complete: hasMedia,
       },
       {
         id: "schedule" as const,
@@ -365,7 +369,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     setSaveState("idle");
     setIsDirty(false);
     setFilter("drafts");
-    setActiveStep("media");
+    setActiveStep("details");
     clearAssetIdParam();
   }
 
@@ -397,7 +401,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       void applySubmission(existingDraft);
       return;
     }
-    setActiveStep("media");
+    setActiveStep("details");
   }
 
   function handleBack() {
@@ -447,7 +451,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       setPickerItems((submission.mediaAssets ?? []).map(savedAssetToPickerItem));
       setActiveMediaIndex(0);
       setFilter(submission.status === "draft" ? "drafts" : "submitted");
-      setActiveStep("media");
+      setActiveStep("details");
       setCenterMode("edit");
       setPreviewTab("preview");
       setSaveState("saved");
@@ -1013,28 +1017,6 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
           )}
 
           <section
-            className={`sub-form-section sub-step-panel ${isReadOnlySubmission || activeStep === "media" ? "active" : ""}`}
-            hidden={!isReadOnlySubmission && activeStep !== "media"}
-          >
-            <SectionHead
-              icon="ti-photo-up"
-              tone="blue"
-              title="Media Assets"
-              subtitle="Upload files, pick from your library, or let AI suggest relevant assets."
-            />
-            <MediaAssetsPicker
-              items={pickerItems}
-              onItemsChange={handlePickerChange}
-              submissionId={form.id}
-              eventTitle={form.eventTitle}
-              caption={form.caption}
-              category={form.category}
-              tags={form.tags}
-              disabled={form.status !== "draft"}
-            />
-          </section>
-
-          <section
             className={`sub-form-section sub-step-panel ${isReadOnlySubmission || activeStep === "details" ? "active" : ""}`}
             ref={detailsSectionRef}
             hidden={!isReadOnlySubmission && activeStep !== "details"}
@@ -1172,6 +1154,28 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                 placeholder="Notes for your Validator..."
               />
             </Field>
+          </section>
+
+          <section
+            className={`sub-form-section sub-step-panel ${isReadOnlySubmission || activeStep === "media" ? "active" : ""}`}
+            hidden={!isReadOnlySubmission && activeStep !== "media"}
+          >
+            <SectionHead
+              icon="ti-photo-up"
+              tone="blue"
+              title="Media Assets"
+              subtitle="Upload files, pick from your library, or let AI suggest relevant assets."
+            />
+            <MediaAssetsPicker
+              items={pickerItems}
+              onItemsChange={handlePickerChange}
+              submissionId={form.id}
+              eventTitle={form.eventTitle}
+              caption={form.caption}
+              category={form.category}
+              tags={form.tags}
+              disabled={form.status !== "draft"}
+            />
           </section>
 
           <section
@@ -1726,7 +1730,7 @@ function StepPanelActions({
   activeStep: ProgressStep;
   onStepChange: (step: ProgressStep) => void;
 }) {
-  const order: ProgressStep[] = ["media", "details", "schedule"];
+  const order: ProgressStep[] = ["details", "media", "schedule"];
   const index = order.indexOf(activeStep);
   const previous = index > 0 ? order[index - 1] : null;
   const next = index < order.length - 1 ? order[index + 1] : null;
@@ -2318,8 +2322,7 @@ function toPayload(form: FormState, scheduledAt?: string): SubmissionPayload {
 
 function isDirtyDraft(form: FormState) {
   return Boolean(
-    form.id ||
-      form.eventTitle.trim() ||
+    form.eventTitle.trim() ||
       form.eventDate ||
       form.caption.trim() ||
       form.description.trim() ||

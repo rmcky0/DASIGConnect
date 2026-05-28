@@ -149,7 +149,14 @@ public class ClaudeVisionClient {
         }
     }
 
+    public record PreparedImage(byte[] bytes, String mediaType) {}
+
     private record ImageData(byte[] bytes, String mediaType) {}
+
+    public PreparedImage prepareImageForEmbedding(String url) {
+        ImageData data = fetchAndPrepareImage(url);
+        return new PreparedImage(data.bytes(), data.mediaType());
+    }
 
     private ImageData fetchAndPrepareImage(String url) {
         byte[] raw = fetchImageBytes(url);
@@ -333,23 +340,16 @@ public class ClaudeVisionClient {
     // ─── UC-3.3 Media Classification ────────────────────────────────────────────
 
     private static final List<String> ALLOWED_CATEGORIES = List.of(
-            "Research and Development", "Innovation", "Seminar / Webinar", "Workshop",
-            "Conference / Forum", "Community Outreach", "Awards and Recognition",
-            "Competition / Contest", "Training / Bootcamp", "Partnership / Collaboration",
-            "Meeting / Coordination", "Facility / Campus", "General Event"
+            "Food", "People", "Event", "Technology", "Research", "Education",
+            "Sports", "Culture", "Nature", "Document", "Product", "Architecture",
+            "Artwork", "Other"
     );
 
-    private static final List<String> ALLOWED_TAGS = List.of(
-            "Science", "Technology", "Engineering", "Mathematics",
-            "Innovation", "Research", "Community", "Outreach",
-            "Students", "Faculty", "Partnership", "DOST", "DASIG",
-            "IT Students", "Awarding", "Recognition", "Medal", "Certificate",
-            "Contest", "Competition", "Capstone", "Project Presentation",
-            "Research Presentation", "Prototype", "Robotics", "Training",
-            "Bootcamp", "Workshop", "Seminar", "Speaker", "Panel Discussion",
-            "Group Photo", "Ceremony", "Winners", "Participants", "Mentors",
-            "Academic Event", "Student Achievement", "Collaboration",
-            "Campus Event", "Innovation Showcase", "Community Engagement"
+    private static final List<String> ALLOWED_ASSET_TYPES = List.of(
+            "Product Photo", "Food Photo", "Event Photo", "Lab Photo",
+            "Project Presentation", "Poster", "Document", "Screenshot",
+            "Portrait", "Group Photo", "Landscape", "Building Photo",
+            "Artwork Photo", "Infographic", "Other"
     );
 
     /**
@@ -433,7 +433,7 @@ public class ClaudeVisionClient {
 
             var root = objectMapper.createObjectNode();
             root.put("model", model);
-            root.put("max_tokens", 256);
+            root.put("max_tokens", 768);
             root.set("messages", messagesArray);
 
             return objectMapper.writeValueAsString(root);
@@ -446,27 +446,44 @@ public class ClaudeVisionClient {
 
     private String buildClassificationPrompt() {
         return """
-            You are an AI classifier for DASIG (DOST Academe-Science and Innovation Group), \
-            a Philippine government science agency network.
+            Analyze this media asset for a university media library.
 
-            Analyze the provided images and create a reusable media-library profile for search and recommendation.
-            Be specific about visible people, activity, event type, objects, setting, and likely context.
+            Return ONLY valid JSON. No explanation. No markdown.
 
-            You MUST return ONLY a valid JSON object - no markdown, no explanation:
+            Your job is to identify what is ACTUALLY VISIBLE in this image.
+            Do NOT force it into academic, research, innovation, technology, student,
+            or event categories unless there is clear visual evidence.
+
+            Allowed primary_category values:
+            Food | People | Event | Technology | Research | Education | Sports | Culture | \
+            Nature | Document | Product | Architecture | Artwork | Other
+
+            Allowed asset_type values:
+            Product Photo | Food Photo | Event Photo | Lab Photo | Project Presentation | \
+            Poster | Document | Screenshot | Portrait | Group Photo | Landscape | \
+            Building Photo | Artwork Photo | Infographic | Other
+
+            Return this exact structure:
             {
-              "category": "<exactly one of: Research and Development | Innovation | Seminar / Webinar | Workshop | Conference / Forum | Community Outreach | Awards and Recognition | Competition / Contest | Training / Bootcamp | Partnership / Collaboration | Meeting / Coordination | Facility / Campus | General Event>",
-              "confidence": <number between 0.0 and 1.0>,
-              "description": "<2-4 factual sentences describing the visible event, people, activity, objects, setting, and likely use case for social media selection>",
-              "suggestedTags": ["<8 to 15 useful tags from the allowed tag list>"]
+              "primary_category": "",
+              "asset_type": "",
+              "ai_caption": "",
+              "visible_objects": [],
+              "specific_subjects": [],
+              "visual_style": [],
+              "dominant_colors": [],
+              "possible_use_cases": [],
+              "ai_tags": [],
+              "excluded_categories": [],
+              "confidence": 0.0
             }
 
             Rules:
-            - category must be exactly one value from the allowed category list.
-            - suggestedTags must contain only values from this allowed tag list:
-              Science | Technology | Engineering | Mathematics | Innovation | Research | Community | Outreach | Students | Faculty | Partnership | DOST | DASIG | IT Students | Awarding | Recognition | Medal | Certificate | Contest | Competition | Capstone | Project Presentation | Research Presentation | Prototype | Robotics | Training | Bootcamp | Workshop | Seminar | Speaker | Panel Discussion | Group Photo | Ceremony | Winners | Participants | Mentors | Academic Event | Student Achievement | Collaboration | Campus Event | Innovation Showcase | Community Engagement
-            - Prefer concrete tags visible or strongly implied by the image over generic tags.
+            - Classify based only on visual evidence.
+            - ai_caption must be factual and neutral, not promotional.
+            - ai_tags must contain 8 to 15 searchable visual tags.
+            - Tags must describe visible subjects, objects, setting, style, or use case.
             - Do not identify private individuals by name.
-            - Description must be factual, not promotional.
             """;
     }
 
@@ -480,38 +497,61 @@ public class ClaudeVisionClient {
 
             JsonNode node = objectMapper.readTree(text);
 
-            String category = node.path("category").asText("").strip();
+            String category = firstText(node, "primary_category", "category").strip();
             if (!ALLOWED_CATEGORIES.contains(category)) {
-                category = ALLOWED_CATEGORIES.get(0);
+                category = "Other";
+            }
+
+            String assetType = node.path("asset_type").asText("").strip();
+            if (!ALLOWED_ASSET_TYPES.contains(assetType)) {
+                assetType = "Other";
             }
 
             double confidence = Math.min(1.0, Math.max(0.0, node.path("confidence").asDouble(0.5)));
-            String description = node.path("description").asText("").strip();
+            String description = firstText(node, "ai_caption", "description").strip();
 
-            List<String> tags = new ArrayList<>();
-            for (JsonNode tagNode : node.path("suggestedTags")) {
-                String tag = tagNode.asText("").strip();
-                String allowed = canonicalAllowedTag(tag);
-                if (allowed != null && !tags.contains(allowed) && tags.size() < 15) {
-                    tags.add(allowed);
-                }
+            List<String> visibleObjects = readStringArray(node, "visible_objects", 20, 60);
+            List<String> specificSubjects = readStringArray(node, "specific_subjects", 20, 80);
+            List<String> visualStyle = readStringArray(node, "visual_style", 15, 60);
+            List<String> dominantColors = readStringArray(node, "dominant_colors", 10, 40);
+            List<String> possibleUseCases = readStringArray(node, "possible_use_cases", 15, 80);
+            List<String> tags = readStringArray(node, "ai_tags", 15, 60);
+            if (tags.isEmpty()) {
+                tags = readStringArray(node, "suggestedTags", 15, 60);
             }
+            List<String> excludedCategories = readStringArray(node, "excluded_categories", 15, 80);
 
-            return new MediaClassificationDto(category, confidence, description, tags);
+            return new MediaClassificationDto(category, assetType, confidence, description,
+                    visibleObjects, specificSubjects, visualStyle, dominantColors,
+                    possibleUseCases, tags, excludedCategories);
         } catch (Exception e) {
             log.warn("Failed to parse Claude classification response: {}", e.getMessage());
             throw new ClaudeApiException("Could not parse classification from Claude response.");
         }
     }
 
-    private String canonicalAllowedTag(String value) {
-        if (value == null || value.isBlank()) return null;
-        for (String allowed : ALLOWED_TAGS) {
-            if (allowed.equalsIgnoreCase(value.strip())) {
-                return allowed;
+    private static String firstText(JsonNode node, String primaryField, String fallbackField) {
+        String primary = node.path(primaryField).asText("").strip();
+        if (!primary.isBlank()) return primary;
+        return node.path(fallbackField).asText("").strip();
+    }
+
+    private static List<String> readStringArray(JsonNode node, String fieldName, int maxItems, int maxLength) {
+        JsonNode array = node.path(fieldName);
+        if (!array.isArray()) return List.of();
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : array) {
+            String value = item.asText("").strip().replaceAll("\\s+", " ");
+            if (value.isBlank()) continue;
+            if (value.length() > maxLength) {
+                value = value.substring(0, maxLength).strip();
             }
+            if (!values.contains(value)) {
+                values.add(value);
+            }
+            if (values.size() >= maxItems) break;
         }
-        return null;
+        return values;
     }
 
     public static class ClaudeApiException extends RuntimeException {

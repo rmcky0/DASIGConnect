@@ -3,11 +3,13 @@ package com.dasigconnect.backend.service;
 import com.dasigconnect.backend.model.dto.ai.MediaSuggestRequestDto;
 import com.dasigconnect.backend.model.dto.ai.MediaSuggestResultDto;
 import com.dasigconnect.backend.model.entity.MediaAsset;
+import com.dasigconnect.backend.model.entity.MediaAssetEmbeddingType;
 import com.dasigconnect.backend.model.entity.MediaFileType;
 import com.dasigconnect.backend.model.entity.Institution;
 import com.dasigconnect.backend.model.entity.Submission;
 import com.dasigconnect.backend.repository.AiInteractionLogRepository;
 import com.dasigconnect.backend.repository.AssetTagRepository;
+import com.dasigconnect.backend.repository.MediaAssetEmbeddingRepository;
 import com.dasigconnect.backend.repository.MediaAssetRepository;
 import com.dasigconnect.backend.repository.SubmissionMediaAssetRepository;
 import com.dasigconnect.backend.repository.SubmissionRepository;
@@ -77,6 +79,7 @@ class AIRecommendationServiceTest {
         SubmissionRepository submissionRepository = mock(SubmissionRepository.class);
         SubmissionMediaAssetRepository submissionMediaAssetRepository = mock(SubmissionMediaAssetRepository.class);
         MediaAssetRepository mediaAssetRepository = mock(MediaAssetRepository.class);
+        MediaAssetEmbeddingRepository mediaAssetEmbeddingRepository = mock(MediaAssetEmbeddingRepository.class);
         AssetTagRepository assetTagRepository = mock(AssetTagRepository.class);
         AiInteractionLogRepository aiInteractionLogRepository = mock(AiInteractionLogRepository.class);
         VoyageAIClient voyageAIClient = mock(VoyageAIClient.class);
@@ -92,17 +95,22 @@ class AIRecommendationServiceTest {
 
         when(submissionRepository.findById(submissionId)).thenReturn(Optional.of(submission));
         when(submissionMediaAssetRepository.findMediaAssetsBySubmissionId(submissionId)).thenReturn(List.of(attached));
-        when(voyageAIClient.embed(org.mockito.ArgumentMatchers.anyString())).thenReturn("[0.1,0.2]");
-        when(mediaAssetRepository.findTopSimilarWithScore(institutionId, "[0.1,0.2]"))
+        when(voyageAIClient.embedQuery(org.mockito.ArgumentMatchers.anyString())).thenReturn("[0.1,0.2]");
+        when(mediaAssetEmbeddingRepository.findTopSimilarWithScore(
+                org.mockito.ArgumentMatchers.eq(institutionId),
+                org.mockito.ArgumentMatchers.eq(MediaAssetEmbeddingType.SEMANTIC),
+                org.mockito.ArgumentMatchers.eq("[0.1,0.2]"),
+                org.mockito.ArgumentMatchers.eq(30)))
                 .thenReturn(List.<Object[]>of(new Object[]{attachedId.toString(), 0.92}));
         when(mediaAssetRepository.findActiveByIds(List.of(attachedId))).thenReturn(List.of(attached));
         when(assetTagRepository.findLabelsAndSourcesByMediaAssetIds(anyList())).thenReturn(List.of());
-        when(mediaAssetRepository.findActiveByInstitution(institutionId)).thenReturn(List.of(attached, fallback));
+        when(mediaAssetRepository.findReadyByInstitution(institutionId)).thenReturn(List.of(attached, fallback));
 
         AIRecommendationService service = new AIRecommendationService(
                 submissionRepository,
                 submissionMediaAssetRepository,
                 mediaAssetRepository,
+                mediaAssetEmbeddingRepository,
                 assetTagRepository,
                 aiInteractionLogRepository,
                 voyageAIClient

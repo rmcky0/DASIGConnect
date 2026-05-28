@@ -17,6 +17,7 @@ import org.springframework.transaction.TransactionStatus;
 
 import com.dasigconnect.backend.model.entity.MediaAsset;
 import com.dasigconnect.backend.repository.AssetTagRepository;
+import com.dasigconnect.backend.repository.MediaAssetEmbeddingRepository;
 import com.dasigconnect.backend.repository.MediaAssetRepository;
 
 class MediaAssetRetentionServiceTest {
@@ -24,6 +25,7 @@ class MediaAssetRetentionServiceTest {
     @Test
     void purgeExpiredDeletedAssets_clearsAiProfileTagsAndStorage() {
         MediaAssetRepository mediaAssetRepository = mock(MediaAssetRepository.class);
+        MediaAssetEmbeddingRepository mediaAssetEmbeddingRepository = mock(MediaAssetEmbeddingRepository.class);
         AssetTagRepository assetTagRepository = mock(AssetTagRepository.class);
         SupabaseStorageService storageService = mock(SupabaseStorageService.class);
         PlatformTransactionManager txManager = mock(PlatformTransactionManager.class);
@@ -38,6 +40,7 @@ class MediaAssetRetentionServiceTest {
 
         MediaAssetRetentionService service = new MediaAssetRetentionService(
                 mediaAssetRepository,
+                mediaAssetEmbeddingRepository,
                 assetTagRepository,
                 storageService,
                 txManager,
@@ -48,6 +51,7 @@ class MediaAssetRetentionServiceTest {
 
         assertEquals(1, purged);
         verify(storageService).deletePublicObject(asset.getStorageUrl());
+        verify(mediaAssetEmbeddingRepository).deleteByAssetId(asset.getId());
         verify(assetTagRepository).deleteByMediaAssetId(asset.getId());
         verify(mediaAssetRepository).purgeAiProfile(asset.getId());
     }

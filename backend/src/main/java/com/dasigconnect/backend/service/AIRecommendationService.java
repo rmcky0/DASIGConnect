@@ -5,9 +5,11 @@ import com.dasigconnect.backend.model.dto.ai.MediaSuggestResultDto;
 import com.dasigconnect.backend.model.dto.media.MediaAssetSummaryDto;
 import com.dasigconnect.backend.model.entity.AiInteractionLog;
 import com.dasigconnect.backend.model.entity.MediaAsset;
+import com.dasigconnect.backend.model.entity.MediaAssetEmbeddingType;
 import com.dasigconnect.backend.model.entity.Submission;
 import com.dasigconnect.backend.repository.AiInteractionLogRepository;
 import com.dasigconnect.backend.repository.AssetTagRepository;
+import com.dasigconnect.backend.repository.MediaAssetEmbeddingRepository;
 import com.dasigconnect.backend.repository.MediaAssetRepository;
 import com.dasigconnect.backend.repository.SubmissionMediaAssetRepository;
 import com.dasigconnect.backend.repository.SubmissionRepository;
@@ -52,6 +54,7 @@ public class AIRecommendationService {
     private final SubmissionRepository submissionRepository;
     private final SubmissionMediaAssetRepository submissionMediaAssetRepository;
     private final MediaAssetRepository mediaAssetRepository;
+    private final MediaAssetEmbeddingRepository mediaAssetEmbeddingRepository;
     private final AssetTagRepository assetTagRepository;
     private final AiInteractionLogRepository aiInteractionLogRepository;
     private final VoyageAIClient voyageAIClient;
@@ -59,12 +62,14 @@ public class AIRecommendationService {
     public AIRecommendationService(SubmissionRepository submissionRepository,
                                    SubmissionMediaAssetRepository submissionMediaAssetRepository,
                                    MediaAssetRepository mediaAssetRepository,
+                                   MediaAssetEmbeddingRepository mediaAssetEmbeddingRepository,
                                    AssetTagRepository assetTagRepository,
                                    AiInteractionLogRepository aiInteractionLogRepository,
                                    VoyageAIClient voyageAIClient) {
         this.submissionRepository = submissionRepository;
         this.submissionMediaAssetRepository = submissionMediaAssetRepository;
         this.mediaAssetRepository = mediaAssetRepository;
+        this.mediaAssetEmbeddingRepository = mediaAssetEmbeddingRepository;
         this.assetTagRepository = assetTagRepository;
         this.aiInteractionLogRepository = aiInteractionLogRepository;
         this.voyageAIClient = voyageAIClient;
@@ -123,13 +128,14 @@ public class AIRecommendationService {
 
         String queryVector;
         try {
-            queryVector = voyageAIClient.embed(embeddingText);
+            queryVector = voyageAIClient.embedQuery(embeddingText);
         } catch (Exception e) {
             log.warn("Voyage AI embedding failed for suggest-media on submission {}: {}", submissionId, e.getMessage());
             return fallbackSuggestions(institutionId, attachedIds, dto);
         }
 
-        List<Object[]> rows = mediaAssetRepository.findTopSimilarWithScore(institutionId, queryVector);
+        List<Object[]> rows = mediaAssetEmbeddingRepository.findTopSimilarWithScore(
+                institutionId, MediaAssetEmbeddingType.SEMANTIC, queryVector, 30);
         List<UUID> candidateIds = new ArrayList<>();
         Map<UUID, Double> semanticScores = new LinkedHashMap<>();
         for (Object[] row : rows) {
@@ -318,7 +324,9 @@ public class AIRecommendationService {
 
     private OptionalVector firstAvailableEmbedding(List<MediaAsset> attached) {
         for (MediaAsset asset : attached) {
-            String embedding = mediaAssetRepository.findEmbeddingById(asset.getId()).orElse(null);
+            String embedding = mediaAssetEmbeddingRepository
+                    .findEmbedding(asset.getId(), MediaAssetEmbeddingType.SEMANTIC)
+                    .orElseGet(() -> mediaAssetRepository.findEmbeddingById(asset.getId()).orElse(null));
             if (embedding != null) return new OptionalVector(embedding);
         }
         return new OptionalVector(null);
@@ -339,7 +347,7 @@ public class AIRecommendationService {
     }
 
     private List<MediaSuggestResultDto> fallbackSuggestions(UUID institutionId, Set<UUID> attachedIds, MediaSuggestRequestDto dto) {
-        List<MediaAsset> candidates = mediaAssetRepository.findActiveByInstitution(institutionId)
+        List<MediaAsset> candidates = mediaAssetRepository.findReadyByInstitution(institutionId)
                 .stream()
                 .filter(asset -> !attachedIds.contains(asset.getId()))
                 .limit(30)

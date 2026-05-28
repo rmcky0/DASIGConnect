@@ -1,66 +1,119 @@
-# Handoff — 2026-05-28 (Session 8)
+# Handoff - 2026-05-28 (Session 9)
 
-## What was done this session
+## What Was Done This Session
 
-- **Additional Java deprecation cleanup** — `HttpStatus.UNPROCESSABLE_ENTITY` replaced in `SubmissionService` (2×: `attachMedia`, `attachExistingAsset`) and `ValidationService` (3×: `validateRemarks`, `validateRejectionCode`). `SubmissionControllerTest` 422 assertion updated to `status().is(422)`. `@SuppressWarnings("unused")` added to `OverrideRequestService.submissionRepository` to suppress IDE warning (field retained for UC-3.5 approval path).
+- **AI Media Library upgrade docs were reviewed and corrected.**
+  - Updated `docs/md/ai-media-library-upgrade.md` with the main pre-implementation fixes:
+    - removed duplicate artwork examples,
+    - added `ai_tags` to the Claude JSON shape,
+    - clarified `ai_caption` / `ai_tags` storage,
+    - fixed `embedding_type` vs `type`,
+    - clarified Voyage image vs text embedding usage,
+    - added `ma.status = 'READY'` and `deleted_at IS NULL` filtering,
+    - added unique `(asset_id, embedding_type)` index and upsert guidance,
+    - expanded soft-delete/hard-delete cleanup,
+    - added migration safety notes.
 
-- **UC-3.5 Administrator Exception Handling — frontend fully implemented.**
-  - `authApi.ts` — added `adminApi` axios instance (base URL = `VITE_API_URL` with `/v1` stripped). `setAuthToken` now updates both `api` and `adminApi` so UC-3.5 endpoints at `/api/admin/resolution/*` share the Bearer token.
-  - `resolutionApi.ts` — extended with all UC-3.5 types and API functions (15 total) using `adminApi`.
-  - `useResolutionCounts.ts` — 60s polling hook (`getResolutionCounts`) drives red count badges on each tab.
-  - `RejectOnBehalfModal.tsx` — shared modal for timeout reject (6-code SRS taxonomy) and override deny (free-text). `mode: "timeout" | "override"` prop controls behavior. `.btn-danger` for destructive submit.
-  - `SlotSuggestionModal.tsx` — Cat. C alternative slot picker with `minDatetime` via `useState` lazy initializer (satisfies `react-hooks/purity` lint rule).
-  - `ValidationTimeoutTab.tsx` — Cat. B table with Approve / Defer / Reject, `UrgencyPill` countdown (red <10 min, amber <20 min, green otherwise). `queueMicrotask` pattern in `useEffect`.
-  - `OverrideRequestsTab.tsx` — Cat. C active/expired split (active rows have 3 actions; expired collapse inside `<details>`), `rc-repeat-flag` badge when `overrideRequestCount >= 2`.
-  - `DirectPostTab.tsx` — Cat. D form: institution select, caption counter (80–280 chars), immediate/scheduled toggle, justification (20 char min), GR-H1 ack checkbox, guard rail info block, live Facebook preview panel (appears when caption is typed).
-  - `SystemAuditTab.tsx` — Cat. E token table with `TokenStatusBadge` (ACTIVE/EXPIRING/EXPIRED/INVALID), Re-Authenticate → `initOAuth` → open OAuth tab in `_blank`. Audit log section is a styled placeholder.
-  - `ResolutionCenterScreen.tsx` — rewritten as 5-tab shell. Tab IDs: `failures | timeouts | overrides | direct-post | system`. Red count badges per tab. Shared `refreshSignal`. `navigateToSystemAudit()` helper for cross-tab "Investigate Token" link.
-  - `resolution.css` — ~350 lines: tab bar, table variants (faded/attention rows), 5 action button variants (approve/defer/suggest/reject), urgency pills, modal form fields, toggle groups, 2-column Direct Post grid, token badge variants, `btn-danger` shared utility.
+- **AI Media Library backend implementation started from the MD basis.**
+  - Added dual embedding support with `media_asset_embeddings`.
+  - Added media asset status lifecycle: `PROCESSING`, `READY`, `FAILED`, `DELETED`.
+  - Claude classification now returns richer structured media metadata including `ai_tags`.
+  - Voyage integration separates multimodal image embedding from text/semantic embedding.
+  - AI suggestion search now excludes deleted/non-ready media assets.
+  - Soft delete cleanup now clears embeddings/tags and marks media deleted.
+  - Added Flyway migration `V25__media_asset_dual_embeddings.sql`.
 
-- **Commit `ea3ac10`** — 15 files, 2263 insertions. Build: 228 modules, 0 TypeScript errors. ESLint clean on all 15 files.
+- **Submit Content UX updates.**
+  - Submission wizard step order changed to:
+    1. Post Details
+    2. Media Assets
+    3. Preferred Schedule
+  - New and loaded drafts open on Post Details first so title/caption/tags exist before AI media suggestion.
+  - Back navigation no longer asks to save when the draft is already saved.
+  - Back navigation still prompts when there are unsaved draft changes.
+  - Local file input can reselect the same batch after selection.
+  - Media Repository upload modal now supports selecting/dropping multiple local assets and uploads them sequentially with aggregate progress.
 
-## Files changed
+- **Duplicate Facebook publish bug diagnosed and fixed.**
+  - Supabase showed duplicate successful publication attempts:
+    - `2c405cb4-1d0d-4e52-a7be-8a9c0fd92a73`
+    - `d3ab4d3b-af1a-420c-b76c-a6f71802bb7a`
+  - Root cause: `PublishingSchedulerJob` could pick the same `scheduled` submission in overlapping scheduler runs or app instances before the first run updated it to `published`.
+  - Fix: added an atomic publish-claim step before Facebook API calls:
+    - `scheduled -> publishing`
+    - `direct_post_scheduled -> direct_post_publishing`
+  - Only the process that successfully updates the DB row can publish. Later overlapping runs skip the row.
+  - Immediate direct posts now use the same claim flow to avoid racing the scheduler.
+  - Added Flyway migration `V26__submission_publishing_claim_status.sql`.
+
+## Files Changed This Session
 
 **Backend:**
-- `backend/src/main/java/com/dasigconnect/backend/service/OverrideRequestService.java` — `@SuppressWarnings("unused")` on `submissionRepository`
-- `backend/src/main/java/com/dasigconnect/backend/service/SubmissionService.java` — 2× `HttpStatusCode.valueOf(422)` (attachMedia, attachExistingAsset)
-- `backend/src/main/java/com/dasigconnect/backend/service/ValidationService.java` — 3× `HttpStatusCode.valueOf(422)` + `HttpStatusCode` import
-- `backend/src/test/java/com/dasigconnect/backend/controller/SubmissionControllerTest.java` — `status().is(422)` assertion
+- `backend/src/main/java/com/dasigconnect/backend/model/entity/SubmissionStatus.java`
+- `backend/src/main/java/com/dasigconnect/backend/repository/SubmissionRepository.java`
+- `backend/src/main/java/com/dasigconnect/backend/schedule/PublishingSchedulerJob.java`
+- `backend/src/main/java/com/dasigconnect/backend/service/PublishingQueryService.java`
+- `backend/src/main/java/com/dasigconnect/backend/service/FacebookPublisherService.java`
+- `backend/src/main/java/com/dasigconnect/backend/service/DirectPostService.java`
+- `backend/src/main/resources/db/migration/V26__submission_publishing_claim_status.sql`
+- `backend/src/test/java/com/dasigconnect/backend/schedule/PublishingSchedulerJobTest.java`
+- `backend/src/test/java/com/dasigconnect/backend/service/PublishingQueryServiceTest.java`
 
-**Frontend (modified):**
-- `frontend/src/api/authApi.ts` — `adminApi` instance + updated `setAuthToken`
-- `frontend/src/api/resolutionApi.ts` — UC-3.5 types and functions added
-- `frontend/src/features/resolution/ResolutionCenterScreen.tsx` — rewritten as 5-tab shell
+**AI Media backend work from this session:**
+- `backend/src/main/resources/db/migration/V25__media_asset_dual_embeddings.sql`
+- `backend/src/main/java/com/dasigconnect/backend/model/entity/MediaAssetEmbedding.java`
+- `backend/src/main/java/com/dasigconnect/backend/model/entity/MediaAssetEmbeddingType.java`
+- `backend/src/main/java/com/dasigconnect/backend/model/entity/MediaAssetStatus.java`
+- `backend/src/main/java/com/dasigconnect/backend/repository/MediaAssetEmbeddingRepository.java`
+- plus updates to Claude/Voyage clients, media asset services, recommendation service, retention service, and related tests.
 
-**Frontend (new):**
-- `frontend/src/features/resolution/DirectPostTab.tsx`
-- `frontend/src/features/resolution/OverrideRequestsTab.tsx`
-- `frontend/src/features/resolution/RejectOnBehalfModal.tsx`
-- `frontend/src/features/resolution/SlotSuggestionModal.tsx`
-- `frontend/src/features/resolution/SystemAuditTab.tsx`
-- `frontend/src/features/resolution/ValidationTimeoutTab.tsx`
-- `frontend/src/hooks/useResolutionCounts.ts`
-- `frontend/src/styles/resolution.css`
+**Frontend:**
+- `frontend/src/api/submissionApi.ts`
+- `frontend/src/components/media/UploadMediaTab.tsx`
+- `frontend/src/features/media-repository/components/UploadModal.tsx`
+- `frontend/src/features/submission/SubmissionScreen.tsx`
 
 **Docs:**
-- `HANDOFF.md`, `TASKS.md`, `CLAUDE.md`
+- `docs/md/ai-media-library-upgrade.md`
+- `HANDOFF.md`
+- `CLAUDE.md`
+- `TASKS.md`
 
-## What's next
+## Verification
 
-1. **Apply V24 migration** — restart the backend locally so Flyway runs `V24__override_requests.sql` on the Supabase DB. This creates the `override_requests` table required by all Cat. C endpoints.
-2. **Browser E2E for UC-3.5** — open `/admin/resolution` as an admin with the backend running. Exercise:
-   - Cat. A (API Failures): retry and manual publish workflow
-   - Cat. B (Validation Timeouts): approve, defer, reject with taxonomy modal
-   - Cat. C (Override Requests): approve, suggest slot, deny with free-text modal
-   - Cat. D (Direct Post): publish immediately and scheduled
-   - Cat. E (System): token re-auth OAuth flow, count badge polling
-3. **Browser E2E for UC-3.3 media suggestions** — restart backend with `VOYAGE_API_KEY` + `ANTHROPIC_API_KEY`, confirm V21/V22 applied, test the AI Suggestions tab in Submit Content.
-4. **Browser E2E for UC-2.3 notifications** — verify SSE stream connects, sidebar badge updates, mark-read/all-read work.
-5. **Pre-merge lint cleanup** — fix pre-existing debt in `App.tsx`, dashboard, submission, validation, user-management files so full-project `npm run lint` passes before final PR.
+- Backend full test suite:
+  - `.\mvnw.cmd test`
+  - Result: **273 tests, 0 failures, 0 errors**
+- Focused publish-claim tests:
+  - `.\mvnw.cmd test "-Dtest=PublishingQueryServiceTest,PublishingSchedulerJobTest"`
+  - Result: **4 tests, 0 failures**
+- Frontend production build:
+  - `npm.cmd run build`
+  - Result: **passed**
+  - Existing Vite chunk-size warning remains.
 
-## Blockers / notes
+## Important Notes
 
-- V24 migration not yet applied to Supabase — backend restart required before UC-3.5 endpoints can be tested in the browser.
-- Full-project `npm run lint` fails due to pre-existing debt outside this session's files — not a blocker for development.
-- `ManualPublishDetail` TypeScript interface may be missing `lastManualPublishAbandonedAt: string | null` (linter stripped it in a prior session). Verify before browser-testing UC-3.4's abandonment banner.
-- UC-2.2 Media Repository retention (V23) and UC-3.3 embeddings (V21/V22) also require a backend restart to apply.
+- Existing duplicate Facebook posts already created for the two affected submissions must be cleaned manually from Facebook if needed. The backend fix prevents future duplicate publishes but cannot remove already-created posts.
+- Apply Flyway migrations on backend restart before browser E2E:
+  - `V25__media_asset_dual_embeddings.sql`
+  - `V26__submission_publishing_claim_status.sql`
+- During AI media implementation, do **not** delete the old `media_assets.embedding` column immediately. The migration strategy keeps old and new embedding paths compatible while search is moved to `media_asset_embeddings`.
+- For AI features in Submit Content, saving a draft first is intentional because the backend needs a stable `submissionId` and saved media/context before running AI caption and AI media suggestion flows.
+
+## What's Next
+
+1. Restart backend so Flyway applies V25 and V26.
+2. Run browser E2E for:
+   - Submit Content step order and draft-exit prompt behavior.
+   - Multi-file local upload from Submit Content and Media Repository.
+   - AI Caption after saving draft.
+   - AI Media Suggestions after title/caption/tags exist and draft is saved.
+   - Scheduled Facebook publishing once, confirming only one `publication_attempts.result = 'success'` row per submission.
+3. In Supabase, optionally audit current duplicates:
+   ```sql
+   SELECT submission_id, result, COUNT(*)
+   FROM publication_attempts
+   GROUP BY submission_id, result
+   HAVING COUNT(*) > 1;
+   ```

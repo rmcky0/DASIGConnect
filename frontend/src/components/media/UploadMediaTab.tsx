@@ -77,7 +77,10 @@ export default function UploadMediaTab({ onFilesAdded, disabled }: UploadMediaTa
           multiple
           accept={ACCEPTED_TYPES.join(",")}
           className="umt-input"
-          onChange={(e) => processFiles(e.target.files)}
+          onChange={(e) => {
+            processFiles(e.target.files);
+            e.target.value = "";
+          }}
           disabled={disabled}
           aria-hidden
           tabIndex={-1}

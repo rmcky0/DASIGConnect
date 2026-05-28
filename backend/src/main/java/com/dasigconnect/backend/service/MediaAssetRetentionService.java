@@ -13,6 +13,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.dasigconnect.backend.model.entity.MediaAsset;
 import com.dasigconnect.backend.repository.AssetTagRepository;
+import com.dasigconnect.backend.repository.MediaAssetEmbeddingRepository;
 import com.dasigconnect.backend.repository.MediaAssetRepository;
 
 @Service
@@ -21,6 +22,7 @@ public class MediaAssetRetentionService {
     private static final Logger log = LoggerFactory.getLogger(MediaAssetRetentionService.class);
 
     private final MediaAssetRepository mediaAssetRepository;
+    private final MediaAssetEmbeddingRepository mediaAssetEmbeddingRepository;
     private final AssetTagRepository assetTagRepository;
     private final SupabaseStorageService supabaseStorageService;
     private final TransactionTemplate txTemplate;
@@ -29,12 +31,14 @@ public class MediaAssetRetentionService {
 
     public MediaAssetRetentionService(
             MediaAssetRepository mediaAssetRepository,
+            MediaAssetEmbeddingRepository mediaAssetEmbeddingRepository,
             AssetTagRepository assetTagRepository,
             SupabaseStorageService supabaseStorageService,
             PlatformTransactionManager transactionManager,
             @Value("${app.media-assets.deleted-retention-days:30}") int retentionDays,
             @Value("${app.media-assets.purge-batch-size:25}") int batchSize) {
         this.mediaAssetRepository = mediaAssetRepository;
+        this.mediaAssetEmbeddingRepository = mediaAssetEmbeddingRepository;
         this.assetTagRepository = assetTagRepository;
         this.supabaseStorageService = supabaseStorageService;
         this.txTemplate = new TransactionTemplate(transactionManager);
@@ -60,6 +64,7 @@ public class MediaAssetRetentionService {
 
             // Short write transaction for DB cleanup only
             txTemplate.execute(status -> {
+                mediaAssetEmbeddingRepository.deleteByAssetId(assetId);
                 assetTagRepository.deleteByMediaAssetId(assetId);
                 mediaAssetRepository.purgeAiProfile(assetId);
                 return null;

@@ -30,10 +30,12 @@ import com.dasigconnect.backend.model.entity.AssetTag;
 import com.dasigconnect.backend.model.entity.Institution;
 import com.dasigconnect.backend.model.entity.MediaAsset;
 import com.dasigconnect.backend.model.entity.MediaFileType;
+import com.dasigconnect.backend.model.entity.MediaAssetStatus;
 import com.dasigconnect.backend.model.entity.User;
 import com.dasigconnect.backend.model.dto.media.MediaAssetUploadUrlRequestDto;
 import com.dasigconnect.backend.model.dto.media.MediaAssetUploadUrlResponseDto;
 import com.dasigconnect.backend.repository.AssetTagRepository;
+import com.dasigconnect.backend.repository.MediaAssetEmbeddingRepository;
 import com.dasigconnect.backend.repository.MediaAssetRepository;
 import com.dasigconnect.backend.repository.SubmissionMediaAssetRepository;
 import com.dasigconnect.backend.repository.SubmissionRepository;
@@ -51,6 +53,7 @@ public class MediaAssetService {
     private final SubmissionRepository submissionRepository;
     private final SubmissionMediaAssetRepository submissionMediaAssetRepository;
     private final AssetTagRepository assetTagRepository;
+    private final MediaAssetEmbeddingRepository mediaAssetEmbeddingRepository;
     private final SubmissionService submissionService;
     private final SupabaseStorageService supabaseStorageService;
     private final AIClassificationService aiClassificationService;
@@ -63,6 +66,7 @@ public class MediaAssetService {
             SubmissionRepository submissionRepository,
             SubmissionMediaAssetRepository submissionMediaAssetRepository,
             AssetTagRepository assetTagRepository,
+            MediaAssetEmbeddingRepository mediaAssetEmbeddingRepository,
             SubmissionService submissionService,
             SupabaseStorageService supabaseStorageService,
             AIClassificationService aiClassificationService) {
@@ -70,6 +74,7 @@ public class MediaAssetService {
         this.submissionRepository = submissionRepository;
         this.submissionMediaAssetRepository = submissionMediaAssetRepository;
         this.assetTagRepository = assetTagRepository;
+        this.mediaAssetEmbeddingRepository = mediaAssetEmbeddingRepository;
         this.submissionService = submissionService;
         this.supabaseStorageService = supabaseStorageService;
         this.aiClassificationService = aiClassificationService;
@@ -183,6 +188,8 @@ public class MediaAssetService {
 
         asset.setDeletedAt(Instant.now());
         asset.setDeletedByUserId(user.userId());
+        asset.setStatus(MediaAssetStatus.DELETED);
+        mediaAssetEmbeddingRepository.deleteByAssetId(assetId);
         mediaAssetRepository.save(asset);
     }
 
@@ -207,6 +214,8 @@ public class MediaAssetService {
         for (MediaAsset asset : assets) {
             asset.setDeletedAt(deletedAt);
             asset.setDeletedByUserId(user.userId());
+            asset.setStatus(MediaAssetStatus.DELETED);
+            mediaAssetEmbeddingRepository.deleteByAssetId(asset.getId());
         }
         mediaAssetRepository.saveAll(assets);
         return new MediaAssetBulkDeleteResponseDto(assetIds);
@@ -242,6 +251,7 @@ public class MediaAssetService {
         asset.setFileName(dto.getFileName());
         asset.setFileType(fileType);
         asset.setFileSizeBytes(dto.getFileSizeBytes());
+        asset.setStatus(MediaAssetStatus.PROCESSING);
         asset = mediaAssetRepository.save(asset);
 
         // Trigger async classification + embedding — never blocks the upload response

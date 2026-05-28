@@ -321,7 +321,8 @@ public class FacebookPublisherService {
     @Transactional
     public void markPublished(Submission submission, String postId) {
         Submission s = submissionRepository.findById(submission.getId()).orElse(submission);
-        boolean isDirectPost = s.getStatus() == SubmissionStatus.direct_post_scheduled;
+        boolean isDirectPost = s.getStatus() == SubmissionStatus.direct_post_scheduled
+                || s.getStatus() == SubmissionStatus.direct_post_publishing;
         s.setStatus(isDirectPost ? SubmissionStatus.admin_direct_post : SubmissionStatus.published);
         s.setPlatformPostId(postId);
         s.setPublishedAt(Instant.now());
@@ -340,7 +341,8 @@ public class FacebookPublisherService {
     @Transactional
     public void markFailed(Submission submission, String error) {
         Submission s = submissionRepository.findById(submission.getId()).orElse(submission);
-        boolean isDirectPost = s.getStatus() == SubmissionStatus.direct_post_scheduled;
+        boolean isDirectPost = s.getStatus() == SubmissionStatus.direct_post_scheduled
+                || s.getStatus() == SubmissionStatus.direct_post_publishing;
         s.setStatus(isDirectPost ? SubmissionStatus.direct_post_failed : SubmissionStatus.publish_failed);
         submissionRepository.save(s);
         eventPublisher.publishEvent(new PublishFailedEvent(s, error));

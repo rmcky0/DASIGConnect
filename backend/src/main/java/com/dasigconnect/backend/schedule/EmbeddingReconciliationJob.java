@@ -45,6 +45,11 @@ public class EmbeddingReconciliationJob {
 
         for (MediaAsset asset : pending) {
             try {
+                if (asset.getFileType() != null && asset.getFileType().isImage()) {
+                    aiClassificationService.classifyAndEmbed(asset.getId(), asset.getStorageUrl());
+                    continue;
+                }
+
                 List<String> tagLabels = assetTagRepository
                         .findByMediaAssetIdOrderByCreatedAtAsc(asset.getId())
                         .stream()

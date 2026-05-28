@@ -53,6 +53,30 @@ public class MediaAsset {
     @Column(name = "ai_description", columnDefinition = "text")
     private String aiDescription;
 
+    @Column(name = "asset_type")
+    private String assetType;
+
+    @Column(name = "visible_objects")
+    private String[] visibleObjects;
+
+    @Column(name = "specific_subjects")
+    private String[] specificSubjects;
+
+    @Column(name = "visual_style")
+    private String[] visualStyle;
+
+    @Column(name = "dominant_colors")
+    private String[] dominantColors;
+
+    @Column(name = "possible_use_cases")
+    private String[] possibleUseCases;
+
+    @Column(name = "ai_tags")
+    private String[] aiTags;
+
+    @Column(name = "excluded_categories")
+    private String[] excludedCategories;
+
     @Column(name = "ai_classified_at")
     private Instant aiClassifiedAt;
 
@@ -67,6 +91,13 @@ public class MediaAsset {
 
     @Column(name = "embedding_model", length = 100)
     private String embeddingModel;
+
+    @Column(name = "reclassified_at")
+    private Instant reclassifiedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private MediaAssetStatus status;
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
@@ -83,6 +114,7 @@ public class MediaAsset {
     @PrePersist
     void onCreate() {
         if (id == null) id = UUID.randomUUID();
+        if (status == null) status = MediaAssetStatus.PROCESSING;
         createdAt = Instant.now();
     }
 
@@ -119,6 +151,30 @@ public class MediaAsset {
     public String getAiDescription() { return aiDescription; }
     public void setAiDescription(String aiDescription) { this.aiDescription = aiDescription; }
 
+    public String getAssetType() { return assetType; }
+    public void setAssetType(String assetType) { this.assetType = assetType; }
+
+    public String[] getVisibleObjects() { return visibleObjects; }
+    public void setVisibleObjects(String[] visibleObjects) { this.visibleObjects = visibleObjects; }
+
+    public String[] getSpecificSubjects() { return specificSubjects; }
+    public void setSpecificSubjects(String[] specificSubjects) { this.specificSubjects = specificSubjects; }
+
+    public String[] getVisualStyle() { return visualStyle; }
+    public void setVisualStyle(String[] visualStyle) { this.visualStyle = visualStyle; }
+
+    public String[] getDominantColors() { return dominantColors; }
+    public void setDominantColors(String[] dominantColors) { this.dominantColors = dominantColors; }
+
+    public String[] getPossibleUseCases() { return possibleUseCases; }
+    public void setPossibleUseCases(String[] possibleUseCases) { this.possibleUseCases = possibleUseCases; }
+
+    public String[] getAiTags() { return aiTags; }
+    public void setAiTags(String[] aiTags) { this.aiTags = aiTags; }
+
+    public String[] getExcludedCategories() { return excludedCategories; }
+    public void setExcludedCategories(String[] excludedCategories) { this.excludedCategories = excludedCategories; }
+
     public Instant getAiClassifiedAt() { return aiClassifiedAt; }
     public void setAiClassifiedAt(Instant aiClassifiedAt) { this.aiClassifiedAt = aiClassifiedAt; }
 
@@ -130,6 +186,12 @@ public class MediaAsset {
 
     public String getEmbeddingModel() { return embeddingModel; }
     public void setEmbeddingModel(String embeddingModel) { this.embeddingModel = embeddingModel; }
+
+    public Instant getReclassifiedAt() { return reclassifiedAt; }
+    public void setReclassifiedAt(Instant reclassifiedAt) { this.reclassifiedAt = reclassifiedAt; }
+
+    public MediaAssetStatus getStatus() { return status; }
+    public void setStatus(MediaAssetStatus status) { this.status = status; }
 
     public Instant getDeletedAt() { return deletedAt; }
     public void setDeletedAt(Instant deletedAt) { this.deletedAt = deletedAt; }

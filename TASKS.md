@@ -60,6 +60,7 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: `FacebookPageTokenRepository` - `findByPageIdAndIsActiveTrue`.
 - Done: `TokenEncryptionService` - AES-256-GCM token encryption; key derived from SHA-256 of app secret; IV stored as `iv_b64:ciphertext_b64`.
 - Done: `SubmissionRepository` additions - `findScheduledInPublishWindow`, `findMissedScheduledSubmissions`, `findPublishFailures`, `findAllWithScheduledSlot`, `findWithScheduledSlotByInstitution`, `findAbandonedManualPublishes`.
+- Done locally: publish idempotency fix - `SubmissionRepository.claimForPublishing()` atomically claims due posts before Facebook API calls.
 - Done: `CalendarEventDto` - role-scoped DTO; admin sees full detail, contributors/validators see masked title for other institutions.
 - Done: `CalendarService` - `getCalendarEvents(JwtUserDetails)` with admin vs scoped calendar logic.
 - Done: `CalendarController` - `GET /api/v1/calendar` (authenticated), `PATCH /api/v1/submissions/{id}/reschedule` (admin only).
@@ -76,6 +77,7 @@ Legend: Done / In Progress / Not Started / Deferred
   - `validateToken()` calls `debug_token` Graph API endpoint; updates `last_validated_at` in DB.
   - DB transaction committed before HTTP calls (respects HikariCP 5-connection limit).
 - Done: `PublishingSchedulerJob` - GR-T5, runs every minute; read transaction to load due submissions, then publish outside transaction.
+- Done locally: `PublishingSchedulerJob` now skips rows that another run/app instance already claimed, preventing duplicate successful Facebook publishes.
 - Done: `StaleSubmissionDetectorJob` - GR-T9, runs every 5 minutes; missed publish windows → PUBLISH_FAILED + `PublishFailedEvent`.
 - Done: `TokenHealthCheckJob` - GR-T4, runs daily at 08:00 UTC; invalid token → `TokenValidationFailedEvent`; expiry within 7 days → `TokenExpiryWarningEvent`.
 - Done: `FailedPublicationDto` - Resolution Center response DTO with last attempt detail and manual publish in-progress flag.
@@ -86,9 +88,11 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: `AbandonmentDetectorJob` (in `schedule/` package) - runs every 5 minutes; clears manual publish sessions open longer than 2 hours.
 - Done: Flyway V19 - adds `last_manual_publish_abandoned_at TIMESTAMPTZ` column to `submissions` for A2 abandonment note.
 - Done: `Submission` entity - `lastManualPublishAbandonedAt` field for tracking most recent 2-hour abandonment.
+- Done locally: `SubmissionStatus` now includes transient publishing claim states: `publishing` and `direct_post_publishing`.
+- Done locally: Flyway V26 - updates `chk_submissions_status` and publish indexes for `publishing` and `direct_post_publishing`.
 - Done: `FailedPublicationDto` - exposes `lastManualPublishAbandonedAt`.
 - Done: Tests - `ManualPublishingServiceTest` (13), `ResolutionControllerTest` (12), `CaptionControllerTest` (9), `CaptionGenerationServiceTest` (9).
-- Not Started: UC-3.5 Administrator Exception Handling - `ExceptionHandlingController`, `ValidationTimeoutService`, `OverrideRequestService`, `DirectPostService`, `TokenManagementService`, `OverrideRequest` entity, Flyway V20 `override_requests` table.
+- Done locally: immediate direct posts now use the same atomic publishing claim path before calling Facebook.
 - Done: `application.properties` - `app.facebook.*` properties wired from env vars.
 - Done: all 208 backend tests pass after UC-3.1 implementation (no regressions).
 
@@ -104,7 +108,9 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: `SubmissionService.submit()` 500 fix — T1 notification wrapped in try-catch so a missing `notifications` table never rolls back the PENDING status transition.
 - Done: `GlobalExceptionHandler` — added `SlotAlreadyTakenException` handler returning 409 Conflict instead of 500.
 - Done: live Facebook photo publish confirmed end-to-end — post published to DasigConnect Facebook Page from a scheduled submission.
-- Note: `.\mvnw.cmd` fails in the current PowerShell environment; use `mvnw` (bash) or direct Maven from `.m2/wrapper/dists`.
+- Done locally: duplicate Facebook publish root cause confirmed by Supabase query showing duplicate `publication_attempts.result = 'success'` rows for two submissions. Fix added atomic publish claiming before Graph API calls.
+- Done locally: focused publish-claim tests passed: `.\mvnw.cmd test "-Dtest=PublishingQueryServiceTest,PublishingSchedulerJobTest"` (4 tests, 0 failures).
+- Done locally: full backend suite passed after AI media and publish-claim changes: `.\mvnw.cmd test` (273 tests, 0 failures, 0 errors).
 
 ### Pending - Backend
 
@@ -127,6 +133,9 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done locally: UC-3.3 richer asset-profile recommendation - Claude classification now produces broad controlled categories, detailed descriptions, and 8-15 controlled tags; AI tags are persisted to `asset_tags`; embeddings include upload month; suggestion query context includes already-attached media metadata; match reasons explain semantic, category, tag, asset-detail, profile-quality, and recency signals.
 - Done locally: UC-3.3 lightweight AI provenance - V22 adds media AI classification/embedding timestamps and model names plus `asset_tags.source`. Manual tags and AI-generated tags are now distinguished in storage, API detail DTOs, recommendation weighting, and match reasons.
 - Done locally: UC-3.3 AI media pipeline documentation - current design is upload metadata -> Claude Vision asset enrichment -> Voyage embedding/vectorization -> pgvector semantic search -> deterministic reranking -> hover/focus match reasons. This keeps suggestion-time token use low because images are scanned once at upload/reconciliation time.
+- Done locally: UC-3.3 AI Media Library upgrade doc reviewed and fixed - `docs/md/ai-media-library-upgrade.md` now clarifies Claude JSON (`ai_caption`, `ai_tags`), Voyage multimodal image vs text embeddings, `embedding_type` naming, ready/non-deleted filters, uniqueness/upsert behavior, cleanup behavior, and migration safety.
+- Done locally: UC-3.3 dual embedding implementation started - V25 adds `media_asset_embeddings` with unique `(asset_id, embedding_type)`, media asset `status`/`deleted_at`, and migration/backfill from old `media_assets.embedding`. New entity/repository support `MediaAssetEmbedding`, `MediaAssetEmbeddingType`, and `MediaAssetEmbeddingRepository`.
+- Done locally: UC-3.3 recommendation search now reads typed embeddings and filters to ready, non-deleted media assets. Soft-delete cleanup removes embeddings/tags and marks assets `DELETED`.
 - Deferred / Cut from current scope: contributor-facing category/tag AI suggestion. Do not continue the `useAiClassification` / `AiClassificationButton` / `AiClassificationSuggestion` path or add `/api/v1/ai/submissions/{id}/suggestions` unless scope changes; media suggestion has higher impact for UC-3.3.
 - Done locally: UC-3.5 Administrator Exception Handling backend — cherry-picked from `feat/uc35-exception-handling` into `module3`. All files present: `ExceptionHandlingController`, 8 DTOs under `model/dto/exception/`, `OverrideRequest`/`OverrideRequestDecision` entities, `OverrideRequestRepository`, `ExpiredOverrideCleanupJob`, `DirectPostService`, `OverrideRequestService`, `TokenManagementService`, `ValidationTimeoutService`, `SubmissionStatus` new enum values (`direct_post_scheduled`, `admin_direct_post`, `direct_post_failed`), `V24__override_requests.sql` migration. V24 not yet applied to Supabase — backend restart required.
 - Done locally: UC-3.5 Administrator Exception Handling frontend — 5-tab hub at `/admin/resolution`: `ValidationTimeoutTab` (Cat. B timeouts: Approve/Defer/Reject, UrgencyPill), `OverrideRequestsTab` (Cat. C: Approve/Suggest/Deny, active/expired split, repeated-request flag), `DirectPostTab` (Cat. D: institution select, caption counter, immediate/schedule toggle, GR-H1 ack, live FB preview), `SystemAuditTab` (Cat. E: token table, OAuth re-auth, audit log placeholder). `RejectOnBehalfModal` (shared modal for timeout taxonomy + override free-text), `SlotSuggestionModal`, `useResolutionCounts` (60s polling badge hook), `adminApi` axios instance. `ResolutionCenterScreen` rewritten as tab shell. `resolution.css` (~350 lines). Build: 228 modules, 0 TS errors, ESLint clean on all 15 files.
@@ -166,6 +175,9 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: Facebook Preview card is clickable and opens a responsive preview/review modal with larger post preview, submission details, missing-field messaging, and Save Draft / Submit for Review / Edit Details actions wired to existing handlers.
 - Done: Facebook Preview media supports carousel review in compact and modal preview; modal includes draggable thumbnail reordering plus keyboard-friendly move controls.
 - Done: reordered media updates the actual submission order. Local files are uploaded in reordered sequence, saved draft media persists through `PATCH /api/v1/submissions/{id}/media/order`, and the first reordered item becomes the first Facebook Preview media.
+- Done locally: Submit Content wizard order changed to Post Details -> Media Assets -> Preferred Schedule so AI media suggestions have title/caption/tags before use.
+- Done locally: saved drafts no longer show the save-before-leaving prompt; unsaved changes still prompt and save before exit.
+- Done locally: Upload Files input resets after selection so users can reselect the same file batch.
 
 ### Dashboard
 
@@ -198,6 +210,7 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: "Add to Draft" picker (`AddToDraftModal`) appends selected assets to an existing contributor draft; "Download Original" performs a true blob download.
 - Done: sidebar actions restructured — Delete + Download + Add to Draft on row 1 (flex equal-width); + New Submission on row 2 (full-width). Bulk delete wired into the sidebar via `canBulkDelete` / `onRequestBulkDelete` props on `AssetDetailPanel`. Header Delete button removed.
 - Done: upload uses XHR with real progress, a 50 MB client guard (raised from 25 MB to match Supabase free-tier limit), and surfaces the Supabase error on failure.
+- Done locally: Media Repository upload modal now accepts multiple local assets via browse or drag/drop and uploads them sequentially with aggregate progress.
 - Gap: mp4 uploads depend on the Supabase `dasigconnect-media` bucket allowing `video/*` MIME types and file-size limit set to 50 MB (dashboard config, not code). Per-type limits (25 MB image / 500 MB video) require Supabase Pro upgrade.
 
 ### Pending - Frontend
@@ -236,6 +249,8 @@ Legend: Done / In Progress / Not Started / Deferred
 - Done: UC-2.4 Analytics (2026-05-27): focused backend tests passed with `.\mvnw.cmd test "-Dtest=MetricsAggregatorServiceTest,AnalyticsControllerTest"`. Frontend production build passed with `npm.cmd run build`. Targeted analytics ESLint passed with `npx.cmd eslint src/api/analyticsApi.ts src/features/analytics --quiet`.
 - Done: UC-3.3 Media Suggestions frontend build (2026-05-27): `npm.cmd run build` passed after the Submit Content media picker and AI Suggestions tab changes (219 modules, 0 TypeScript errors).
 - Done: UC-3.3 Media Suggestions backend verification (2026-05-27): `.\mvnw.cmd test` passed after hybrid ranking, richer embedding text, and the `voyage-4-lite`/V21 dimension alignment (220 tests, 0 failures, 0 errors).
+- Done locally: frontend build passed after submission step-order, draft prompt, and multi-upload changes: `npm.cmd run build`.
+- Done locally: backend suite passed after AI media dual embeddings and publish-claim changes: `.\mvnw.cmd test` (273 tests, 0 failures, 0 errors).
 - Note: full-project `npm.cmd run lint` still fails due pre-existing lint debt outside analytics (`App.tsx`, dashboard, submission, validation, user-management, shared toast/button files); targeted analytics lint is clean.
 
 ---
