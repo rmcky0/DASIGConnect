@@ -37,11 +37,17 @@
   min-height: calc(100vh - 56px);
   overflow-y: auto;
   position: relative;
-  transition: padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* On close: wait for the panel to slide fully off-screen before collapsing the
+     grid padding. This prevents cards from reflowing while the panel is still
+     partially visible. The 0.25s delay is picked up because CSS uses the
+     end-state's transition when a class is removed. */
+  transition: padding-right 0.25s cubic-bezier(0.4, 0, 0.2, 1) 0.25s;
 }
 
 .med-page.panel-open {
   padding-right: 452px;
+  /* On open: expand the grid immediately alongside the panel slide-in (no delay). */
+  transition: padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0s;
 }
 
 /* ===== PAGE HEADER ===== */
@@ -688,6 +694,9 @@
   z-index: 50;
   transform: translateX(100%);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Promote to its own compositor layer so the slide animation never
+     triggers a layout/paint on the card grid below it. */
+  will-change: transform;
   overflow: hidden;
   box-shadow: -4px 0 24px rgba(10, 22, 40, 0.08);
   font-family: var(--med-ff-body);

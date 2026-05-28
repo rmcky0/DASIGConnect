@@ -176,18 +176,43 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
 
   function closePanel() {
     setPanelOpen(false);
-    setSelectedAsset(null);
+    // selectedAsset is intentionally kept so the panel slides out with its
+    // content visible instead of going blank mid-animation. openAsset() always
+    // sets a fresh asset before the panel is shown again, so no stale data
+    // is ever displayed to the user.
   }
 
   function clearChecked() {
     clearSelection();
-    if (!selectedAsset) setPanelOpen(false);
+    closePanel();
+  }
+
+  // Deselects a single asset by ID and keeps panel state consistent:
+  // - nothing left checked  → slide the panel closed
+  // - others still checked, panel was showing this asset → switch to another selected asset
+  // - others still checked, panel shows something else  → leave panel alone
+  function handleDeselect(id: string) {
+    const remainingIds = new Set(checkedIds);
+    remainingIds.delete(id);
+    toggleCheck(id);
+
+    if (remainingIds.size === 0) {
+      closePanel();
+    } else if (selectedAsset?.id === id) {
+      const nextAsset = assets.find((a) => remainingIds.has(a.id));
+      if (nextAsset) openAsset(nextAsset);
+      else closePanel();
+    }
+    // else: panel already shows a different, still-selected asset — no change needed
   }
 
   function handleToggleCheck(asset: MediaAsset) {
-    const willCheck = !checkedIds.has(asset.id);
-    toggleCheck(asset.id);
-    if (willCheck) openAsset(asset);
+    if (checkedIds.has(asset.id)) {
+      handleDeselect(asset.id);
+    } else {
+      toggleCheck(asset.id);
+      openAsset(asset);
+    }
   }
 
   function activeAssetIds() {
@@ -553,7 +578,7 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
         selectionMode={selectionMode}
         selectedAssets={selectedAssets}
         onViewAsset={(a) => openAsset(a)}
-        onDeselectAsset={(id) => toggleCheck(id)}
+        onDeselectAsset={(id) => handleDeselect(id)}
         onNewPost={handleNewPost}
         onClearSelection={clearChecked}
         onClose={closePanel}
