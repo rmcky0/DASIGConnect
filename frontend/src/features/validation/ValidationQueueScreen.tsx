@@ -4,6 +4,7 @@ import { getSubmission, type SubmissionSummary } from "../../api/submissionApi";
 import {
   acquireReviewLock,
   approveSubmission,
+  getValidationQueue,
   rejectSubmission,
   releaseReviewLock,
   requestSubmissionRevision,
@@ -21,10 +22,11 @@ interface ValidationQueueScreenProps {
   user: User;
 }
 
-type QueueFilter = "pending" | "in_review" | "all";
+type QueueFilter = "pending" | "in_review" | "all" | "history";
 type SortKey = "deadline" | "submitted";
 type DecisionModal = "approve" | "revise" | "reject" | null;
 const MODAL_EXIT_MS = 190;
+const REVIEWABLE_STATUSES = new Set(["pending", "in_review"]);
 
 const rejectionReasons: Array<{ code: RejectionReasonCode; label: string }> = [
   { code: "INCOMPLETE_CONTENT", label: "Incomplete content" },
@@ -40,6 +42,14 @@ const statusLabel: Record<string, string> = {
   in_review: "In Review",
   needs_revision: "Needs Revision",
   scheduled: "Scheduled",
+  publishing: "Publishing",
+  published: "Published",
+  published_manual: "Published (Manual)",
+  admin_direct_post: "Direct Post",
+  direct_post_scheduled: "Direct Post Scheduled",
+  direct_post_publishing: "Direct Post Publishing",
+  direct_post_failed: "Direct Post Failed",
+  publish_failed: "Publish Failed",
   rejected: "Rejected",
 };
 
@@ -47,7 +57,10 @@ export default function ValidationQueueScreen({
   user,
 }: ValidationQueueScreenProps) {
   const toast = useToast();
-  const { queue, loading, error, refresh } = useValidationQueue();
+  const { queue: activeQueue, loading: activeLoading, error: activeError, refresh } = useValidationQueue();
+  const [historyQueue, setHistoryQueue] = useState<SubmissionSummary[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<SubmissionSummary | null>(null);
   const [selectedLoading, setSelectedLoading] = useState(false);
@@ -68,12 +81,17 @@ export default function ValidationQueueScreen({
   const modalExitTimer = useRef<number | null>(null);
   const activeLockRef = useRef<ReviewLock | null>(null);
 
+  const isHistoryMode = filter === "history";
+  const queue = isHistoryMode ? historyQueue : activeQueue;
+  const loading = isHistoryMode ? historyLoading : activeLoading;
+  const error = isHistoryMode ? historyError : activeError;
+
   const filteredQueue = useMemo(() => {
     const term = search.trim().toLowerCase();
     return queue
       .filter((item) => {
         const status = normalizeStatus(item.status);
-        if (filter !== "all" && status !== filter) return false;
+        if (filter !== "all" && filter !== "history" && status !== filter) return false;
         if (!term) return true;
         return [
           item.eventTitle,
@@ -86,10 +104,11 @@ export default function ValidationQueueScreen({
       })
       .sort((a, b) => {
         const left =
-          sortKey === "deadline" ? a.scheduledAt || "" : a.submittedAt || "";
+          sortKey === "deadline" ? a.scheduledAt || "" : a.submittedAt || a.createdAt || "";
         const right =
-          sortKey === "deadline" ? b.scheduledAt || "" : b.submittedAt || "";
-        return left.localeCompare(right);
+          sortKey === "deadline" ? b.scheduledAt || "" : b.submittedAt || b.createdAt || "";
+        const cmp = left.localeCompare(right);
+        return isHistoryMode ? -cmp : cmp;
       });
   }, [filter, queue, search, sortKey]);
 
@@ -103,10 +122,10 @@ export default function ValidationQueueScreen({
     [log],
   );
 
-  const pendingCount = queue.filter(
+  const pendingCount = activeQueue.filter(
     (item) => normalizeStatus(item.status) === "pending",
   ).length;
-  const reviewCount = queue.filter(
+  const reviewCount = activeQueue.filter(
     (item) => normalizeStatus(item.status) === "in_review",
   ).length;
 
@@ -115,7 +134,25 @@ export default function ValidationQueueScreen({
   const isSelfReview =
     Boolean(selected?.contributorEmail) &&
     selected?.contributorEmail?.toLowerCase() === user.email.toLowerCase();
-  const canAct = Boolean(selected && activeLock && !isSelfReview);
+  const isTerminalStatus = Boolean(
+    selected && !REVIEWABLE_STATUSES.has(normalizeStatus(selected.status ?? "")),
+  );
+  const canAct = Boolean(selected && activeLock && !isSelfReview && !isTerminalStatus);
+
+  useEffect(() => {
+    if (!isHistoryMode) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setHistoryLoading(true);
+      setHistoryError("");
+      getValidationQueue({ history: true })
+        .then((res) => { if (active) setHistoryQueue(res.data); })
+        .catch((err: unknown) => { if (active) setHistoryError(readApiError(err, "Unable to load submission history.")); })
+        .finally(() => { if (active) setHistoryLoading(false); });
+    });
+    return () => { active = false; };
+  }, [isHistoryMode]);
 
   useEffect(() => {
     if (selectedId || loading || queue.length === 0) return;
@@ -134,6 +171,19 @@ export default function ValidationQueueScreen({
       if (modalExitTimer.current) window.clearTimeout(modalExitTimer.current);
     };
   }, []);
+
+  function handleFilterChange(next: QueueFilter) {
+    if (next === filter) return;
+    if (activeLock) {
+      void releaseReviewLock(activeLock.submissionId).catch(() => undefined);
+      setActiveLock(null);
+    }
+    setSelected(null);
+    setSelectedId(null);
+    setLockNotice("");
+    setSortKey(next === "history" ? "submitted" : "deadline");
+    setFilter(next);
+  }
 
   function openDecisionModal(nextModal: Exclude<DecisionModal, null>) {
     if (modalExitTimer.current) window.clearTimeout(modalExitTimer.current);
@@ -171,6 +221,12 @@ export default function ValidationQueueScreen({
       const detail = await getSubmission(summary.id);
       setSelected(detail.data);
 
+      if (!REVIEWABLE_STATUSES.has(normalizeStatus(summary.status))) {
+        setActiveLock(null);
+        setLockNotice("");
+        return;
+      }
+
       if (summary.contributorEmail?.toLowerCase() === user.email.toLowerCase()) {
         setActiveLock(null);
         setLockNotice("Self-validation blocked. This submission must be reviewed by another Validator.");
@@ -180,13 +236,10 @@ export default function ValidationQueueScreen({
       const lock = await acquireReviewLock(summary.id);
       setActiveLock(lock.data);
       setLockNotice("");
-    } catch (err: any) {
-      const message =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        err.message ||
-        "Unable to open this submission.";
-      if (err.response?.status === 409) {
+    } catch (err: unknown) {
+      const message = readApiError(err, "Unable to open this submission.");
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
         setActiveLock(null);
         setLockNotice(message);
       } else {
@@ -208,7 +261,7 @@ export default function ValidationQueueScreen({
       setSelected(null);
       setSelectedId(null);
       await refresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(readApiError(err, "Approval failed."));
     } finally {
       setDecisionBusy(false);
@@ -231,7 +284,7 @@ export default function ValidationQueueScreen({
       setSelected(null);
       setSelectedId(null);
       await refresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(readApiError(err, "Revision request failed."));
     } finally {
       setDecisionBusy(false);
@@ -258,7 +311,7 @@ export default function ValidationQueueScreen({
       setSelected(null);
       setSelectedId(null);
       await refresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(readApiError(err, "Rejection failed."));
     } finally {
       setDecisionBusy(false);
@@ -281,23 +334,30 @@ export default function ValidationQueueScreen({
             <button
               className={filter === "pending" ? "active" : ""}
               type="button"
-              onClick={() => setFilter("pending")}
+              onClick={() => handleFilterChange("pending")}
             >
               Pending <span>{pendingCount}</span>
             </button>
             <button
               className={filter === "in_review" ? "active" : ""}
               type="button"
-              onClick={() => setFilter("in_review")}
+              onClick={() => handleFilterChange("in_review")}
             >
               Review <span>{reviewCount}</span>
             </button>
             <button
               className={filter === "all" ? "active" : ""}
               type="button"
-              onClick={() => setFilter("all")}
+              onClick={() => handleFilterChange("all")}
             >
               All
+            </button>
+            <button
+              className={filter === "history" ? "active" : ""}
+              type="button"
+              onClick={() => handleFilterChange("history")}
+            >
+              History
             </button>
           </div>
 
@@ -547,7 +607,9 @@ export default function ValidationQueueScreen({
                 {logLoading && <p className="val-muted">Loading audit log...</p>}
                 {!logLoading && visibleLog.length === 0 && (
                   <p className="val-muted">
-                    No approval, revision, rejection, or timeout actions recorded yet.
+                    {isTerminalStatus
+                      ? "No validation actions recorded — this submission was not reviewed through the validation workflow."
+                      : "No approval, revision, rejection, or timeout actions recorded yet."}
                   </p>
                 )}
                 {!logLoading &&
@@ -569,38 +631,47 @@ export default function ValidationQueueScreen({
               </section>
             </div>
 
-            <footer className="val-action-bar">
-              <span>
-                <i className="ti ti-info-circle"></i>
-                {canAct
-                  ? "Record your decision. Actions are permanent and logged."
-                  : "Actions unavailable until you hold the review lock."}
-              </span>
-              <button
-                className="val-btn danger"
-                type="button"
-                disabled={!canAct}
-                onClick={() => openDecisionModal("reject")}
-              >
-                <i className="ti ti-ban"></i> Reject
-              </button>
-              <button
-                className="val-btn warn"
-                type="button"
-                disabled={!canAct}
-                onClick={() => openDecisionModal("revise")}
-              >
-                <i className="ti ti-pencil-exclamation"></i> Request Revision
-              </button>
-              <button
-                className="val-btn success"
-                type="button"
-                disabled={!canAct}
-                onClick={() => openDecisionModal("approve")}
-              >
-                <i className="ti ti-circle-check"></i> Approve
-              </button>
-            </footer>
+            {isTerminalStatus ? (
+              <footer className="val-action-bar val-action-bar--readonly">
+                <span>
+                  <i className="ti ti-eye"></i>
+                  Read-only — this submission is {statusLabel[normalizeStatus(selected?.status ?? "")] ?? selected?.status ?? "in a terminal state"} and can no longer be acted on.
+                </span>
+              </footer>
+            ) : (
+              <footer className="val-action-bar">
+                <span>
+                  <i className="ti ti-info-circle"></i>
+                  {canAct
+                    ? "Record your decision. Actions are permanent and logged."
+                    : "Actions unavailable until you hold the review lock."}
+                </span>
+                <button
+                  className="val-btn danger"
+                  type="button"
+                  disabled={!canAct}
+                  onClick={() => openDecisionModal("reject")}
+                >
+                  <i className="ti ti-ban"></i> Reject
+                </button>
+                <button
+                  className="val-btn warn"
+                  type="button"
+                  disabled={!canAct}
+                  onClick={() => openDecisionModal("revise")}
+                >
+                  <i className="ti ti-pencil-exclamation"></i> Request Revision
+                </button>
+                <button
+                  className="val-btn success"
+                  type="button"
+                  disabled={!canAct}
+                  onClick={() => openDecisionModal("approve")}
+                >
+                  <i className="ti ti-circle-check"></i> Approve
+                </button>
+              </footer>
+            )}
           </>
         )}
       </main>
@@ -867,11 +938,7 @@ function formatDateTime(value?: string) {
   }).format(date);
 }
 
-function readApiError(error: any, fallback: string) {
-  return (
-    error.response?.data?.error ||
-    error.response?.data?.message ||
-    error.message ||
-    fallback
-  );
+function readApiError(error: unknown, fallback: string) {
+  const err = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+  return err?.response?.data?.error || err?.response?.data?.message || err?.message || fallback;
 }

@@ -80,6 +80,21 @@ public class ValidationService {
     }
 
     /**
+     * Returns the validation history: all non-draft submissions that are no longer in the
+     * active queue (i.e. not PENDING or IN_REVIEW), sorted newest scheduled first.
+     */
+    @Transactional(readOnly = true)
+    public List<SubmissionSummaryDto> getHistory(JwtUserDetails caller) {
+        List<Submission> submissions = "administrator".equals(caller.role())
+                ? submissionRepository.findValidationHistory()
+                : submissionRepository.findValidationHistoryByInstitution(caller.institutionId());
+        return submissions.stream()
+                .map(s -> SubmissionSummaryDto.from(s,
+                        submissionMediaAssetRepository.countBySubmissionId(s.getId())))
+                .toList();
+    }
+
+    /**
      * Approves a submission: transitions to SCHEDULED, confirms slot, releases lock.
      * GR-H5: self-review blocked.
      */

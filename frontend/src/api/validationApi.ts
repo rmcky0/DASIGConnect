@@ -38,8 +38,11 @@ export type RejectionReasonCode =
   | "WRONG_INSTITUTION"
   | "OTHER";
 
-export function getValidationQueue(signal?: AbortSignal) {
-  return api.get<SubmissionSummary[]>("/validation/queue", { signal });
+export function getValidationQueue(options?: { history?: boolean; signal?: AbortSignal }) {
+  return api.get<SubmissionSummary[]>("/validation/queue", {
+    params: options?.history ? { history: true } : undefined,
+    signal: options?.signal,
+  });
 }
 
 export function acquireReviewLock(submissionId: string) {
