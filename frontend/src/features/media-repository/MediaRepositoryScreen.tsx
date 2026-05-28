@@ -101,6 +101,14 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
     clear: clearSelection,
   } = usePersistentSelection("dasigconnect:media-selection");
 
+  // Always start with an empty selection when the page mounts.
+  // IDs are already captured in the ?assetIds= URL before navigating away,
+  // so there is no reason to restore a stale sessionStorage selection.
+  useEffect(() => {
+    clearSelection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [addToDraftOpen, setAddToDraftOpen] = useState(false);
   const [drafts, setDrafts] = useState<SubmissionSummary[]>([]);
   const [draftsLoading, setDraftsLoading] = useState(false);

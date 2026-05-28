@@ -35,9 +35,11 @@ export default function AssetCard({
     >
       <div className="med-card-thumb">
         <span className={`med-card-check${checked ? " checked" : ""}`} aria-hidden="true">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20,6 9,17 4,12" />
-          </svg>
+          {checked && (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20,6 9,17 4,12" />
+            </svg>
+          )}
         </span>
         {asset.storageUrl ? (
           isVideo ? (
