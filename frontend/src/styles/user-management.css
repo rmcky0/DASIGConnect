@@ -366,21 +366,6 @@
   flex-shrink: 0;
 }
 
-.um-composer-priority {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: #F8FAFC;
-  border: 1px solid #D9E3F0;
-  color: #475569;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
 .um-composer-count {
   display: inline-flex;
   align-items: center;
@@ -733,42 +718,10 @@
 .um-composer-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   padding-top: 16px;
   border-top: 1px solid #E3EAF5;
-}
-
-.um-csv-hint {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: var(--d-muted);
-  font-size: 12px;
-}
-
-.um-csv-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: #F8FAFC;
-  border: 1px solid #D9E3F0;
-  color: #64748B;
-  flex-shrink: 0;
-}
-
-.um-csv-hint i { font-size: 15px; }
-
-.um-csv-hint strong {
-  display: block;
-  margin-top: 2px;
-  color: #64748B;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 /* Send button */
@@ -1146,13 +1099,6 @@
 
 .um-table td strong { display: block; overflow-wrap: anywhere; }
 
-.um-table-sub {
-  display: block;
-  margin-top: 2px;
-  color: var(--d-muted);
-  font-size: 11.5px;
-}
-
 .um-table-actions-cell {
   width: 44px;
   padding: 8px 12px !important;
@@ -1512,7 +1458,6 @@
   .um-composer { padding: 22px 18px 20px; }
   .um-composer-section { padding: 14px; }
   .um-composer-footer { flex-direction: column; align-items: stretch; }
-  .um-csv-hint { align-self: flex-start; }
   .um-send-btn { width: 100%; justify-content: center; }
   .um-filter-bar { flex-direction: column; align-items: stretch; }
   .um-search-wrap { max-width: 100%; }

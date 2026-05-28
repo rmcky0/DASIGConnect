@@ -204,7 +204,10 @@
 }
 
 .dc-select-option.selected:hover {
+  background: var(--sub-blue, #1877f2);
+  border-color: var(--sub-blue, #1877f2);
   color: #fff;
+  transform: translateX(0);
 }
 
 .dc-select-option:disabled {

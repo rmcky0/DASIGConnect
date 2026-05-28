@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { CalendarEvent } from "../../api/calendarApi";
 import type { User } from "../../types/auth.types";
 import { useCalendarEvents } from "../../hooks/useCalendarEvents";
+import BrandedSelect from "../../components/ui/BrandedSelect";
 import CalendarView from "./CalendarView";
 import CalendarEventDetailModal from "./CalendarEventDetailModal";
 import CalendarLegend from "./CalendarLegend";
@@ -195,6 +196,24 @@ export default function CalendarScreen({ user }: CalendarScreenProps) {
   const contextLabel = isAdmin
     ? "System-wide publishing visibility across institutions"
     : "Institution publishing schedule and contributor workflow updates";
+  const myInstitutionLabel = user.inst ? `My Institution (${user.inst})` : "My Institution";
+  const institutionOptions = [
+    { value: "all", label: isAdmin ? "All institutions" : myInstitutionLabel },
+    ...institutions.map(([id, name]) => ({ value: id, label: name })),
+  ];
+  const statusOptions = [
+    { value: "all", label: "All statuses" },
+    { value: "scheduled", label: "Scheduled" },
+    { value: "published", label: "Published" },
+    { value: "failed", label: "Failed" },
+    { value: "attention", label: "Needs attention" },
+  ];
+  const dateOptions = [
+    { value: "all", label: "All dates" },
+    { value: "today", label: "Today" },
+    { value: "7d", label: "Next 7 days" },
+    { value: "30d", label: "Next 30 days" },
+  ];
 
   return (
     <div className="screen-root">
@@ -206,6 +225,58 @@ export default function CalendarScreen({ user }: CalendarScreenProps) {
           </p>
         </div>
       </div>
+
+      <section className="cal-overview-grid" aria-label="Publishing metrics">
+        <MetricCard metric="scheduled" icon="ti ti-calendar-time" label="Scheduled Posts" value={metrics.scheduled} tone="blue" onOpen={setActiveMetric} />
+        <MetricCard metric="published" icon="ti ti-circle-check" label="Published" value={metrics.published} tone="green" onOpen={setActiveMetric} />
+        <MetricCard metric="failed" icon="ti ti-alert-circle" label="Failed" value={metrics.failed} tone="red" onOpen={setActiveMetric} />
+        <MetricCard metric="attention" icon="ti ti-alert-triangle" label="Needs Attention" value={metrics.attention} tone="orange" onOpen={setActiveMetric} />
+        <MetricCard metric="today" icon="ti ti-sun" label="Upcoming Today" value={metrics.today} tone="purple" onOpen={setActiveMetric} />
+      </section>
+
+      <section className="cal-filter-bar" aria-label="Calendar filters">
+        <div className="cal-filter-field">
+          <span className="cal-filter-label">Institution</span>
+          <BrandedSelect
+            value={institutionFilter}
+            options={institutionOptions}
+            onChange={setInstitutionFilter}
+            ariaLabel="Filter calendar by institution"
+            className="cal-filter-select"
+          />
+        </div>
+        <div className="cal-filter-field">
+          <span className="cal-filter-label">Status</span>
+          <BrandedSelect
+            value={statusFilter}
+            options={statusOptions}
+            onChange={setStatusFilter}
+            ariaLabel="Filter calendar by status"
+            className="cal-filter-select"
+          />
+        </div>
+        <div className="cal-filter-field">
+          <span className="cal-filter-label">Date Range</span>
+          <BrandedSelect
+            value={dateFilter}
+            options={dateOptions}
+            onChange={setDateFilter}
+            ariaLabel="Filter calendar by date range"
+            className="cal-filter-select"
+          />
+        </div>
+        <button
+          type="button"
+          className="btn-secondary btn-sm"
+          onClick={() => {
+            setInstitutionFilter("all");
+            setStatusFilter("all");
+            setDateFilter("all");
+          }}
+        >
+          Clear filters
+        </button>
+      </section>
 
       <div className="cal-toolbar-row">
         <CalendarToolbar
@@ -222,68 +293,6 @@ export default function CalendarScreen({ user }: CalendarScreenProps) {
           }}
         />
       </div>
-
-      <section className="cal-overview-grid" aria-label="Publishing metrics">
-        <MetricCard metric="scheduled" icon="ti ti-calendar-time" label="Scheduled Posts" value={metrics.scheduled} tone="blue" onOpen={setActiveMetric} />
-        <MetricCard metric="published" icon="ti ti-circle-check" label="Published" value={metrics.published} tone="green" onOpen={setActiveMetric} />
-        <MetricCard metric="failed" icon="ti ti-alert-circle" label="Failed" value={metrics.failed} tone="red" onOpen={setActiveMetric} />
-        <MetricCard metric="attention" icon="ti ti-alert-triangle" label="Needs Attention" value={metrics.attention} tone="orange" onOpen={setActiveMetric} />
-        <MetricCard metric="today" icon="ti ti-sun" label="Upcoming Today" value={metrics.today} tone="purple" onOpen={setActiveMetric} />
-      </section>
-
-      <section className="cal-filter-bar" aria-label="Calendar filters">
-        <div className="cal-filter-field">
-          <label htmlFor="cal-institution-filter">Institution</label>
-          <select
-            id="cal-institution-filter"
-            value={institutionFilter}
-            onChange={(event) => setInstitutionFilter(event.target.value)}
-          >
-            <option value="all">{isAdmin ? "All institutions" : "My institution"}</option>
-            {institutions.map(([id, name]) => (
-              <option key={id} value={id}>{name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="cal-filter-field">
-          <label htmlFor="cal-status-filter">Status</label>
-          <select
-            id="cal-status-filter"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-          >
-            <option value="all">All statuses</option>
-            <option value="scheduled">Scheduled</option>
-            <option value="published">Published</option>
-            <option value="failed">Failed</option>
-            <option value="attention">Needs attention</option>
-          </select>
-        </div>
-        <div className="cal-filter-field">
-          <label htmlFor="cal-date-filter">Date Range</label>
-          <select
-            id="cal-date-filter"
-            value={dateFilter}
-            onChange={(event) => setDateFilter(event.target.value)}
-          >
-            <option value="all">All dates</option>
-            <option value="today">Today</option>
-            <option value="7d">Next 7 days</option>
-            <option value="30d">Next 30 days</option>
-          </select>
-        </div>
-        <button
-          type="button"
-          className="btn-secondary btn-sm"
-          onClick={() => {
-            setInstitutionFilter("all");
-            setStatusFilter("all");
-            setDateFilter("all");
-          }}
-        >
-          Clear filters
-        </button>
-      </section>
 
       {!loading && error && (
         <CalendarErrorState message={error} onRetry={refresh} />

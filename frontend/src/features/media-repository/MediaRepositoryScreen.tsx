@@ -370,7 +370,7 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
     } else if (tier === "warning") {
       setBlockingUsages([]);
       const warning = selectedAsset.usedIn?.filter(
-        (u) => u.submissionStatus === "draft" || u.submissionStatus === "pending",
+        (u) => u.submissionStatus === "draft" || u.submissionStatus === "needs_revision",
       ) ?? [];
       setWarningUsages(warning);
     } else {
@@ -578,6 +578,11 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
         selectionMode={selectionMode}
         selectedAssets={selectedAssets}
         onViewAsset={(a) => openAsset(a)}
+        onViewSubmission={(submissionId) =>
+          navigate(`/submissions/${encodeURIComponent(submissionId)}`, {
+            state: { returnTo: "/media-repository" },
+          })
+        }
         onDeselectAsset={(id) => handleDeselect(id)}
         onNewPost={handleNewPost}
         onClearSelection={clearChecked}

@@ -595,7 +595,7 @@ const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
                 <div className="dash-inline-field im-code-preview">
                   <div>
                     <div className="dash-inline-label">Generated Institution Code</div>
-                    <div className="dash-inline-sub">Based on name/domain. You can edit later.</div>
+                    <div className="dash-inline-sub">Based on name/domain.</div>
                   </div>
                   <div className="dash-pill">
                     {generateInstitutionCode(trimmedAddName, normalizedAddDomain) || 'AUTO'}

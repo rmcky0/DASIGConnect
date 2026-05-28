@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
 import type { DeleteTier } from "../types";
 import type { MediaAsset, MediaUsage } from "../../../api/mediaApi";
 import { formatUploadDate, formatFileSize } from "../utils";
@@ -134,14 +135,18 @@ function BlockedBody({ usage }: { usage: MediaUsage | null }) {
               </div>
               <div className="med-conflict-sub">Submitted {formatUploadDate(usage.submittedAt)}</div>
             </div>
-            <a className="med-jump-link" href={`/submissions/${usage.submissionId}`}>
+            <Link
+              className="med-jump-link"
+              to={`/submissions/${encodeURIComponent(usage.submissionId)}`}
+              state={{ returnTo: "/media-repository" }}
+            >
               Open Submission
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                 <polyline points="15,3 21,3 21,9" />
                 <line x1="10" y1="14" x2="21" y2="3" />
               </svg>
-            </a>
+            </Link>
           </div>
         </>
       )}
@@ -176,6 +181,8 @@ function BulkWarningBody({ assetCount }: { assetCount: number }) {
 }
 
 function WarningBody({ usages }: { usages: MediaUsage[] }) {
+  const referenceLabel = usages.length === 1 ? "draft/revision submission" : "draft/revision submissions";
+
   return (
     <>
       <div className="med-delete-warning-banner">
@@ -187,30 +194,41 @@ function WarningBody({ usages }: { usages: MediaUsage[] }) {
         <div>
           <div className="med-banner-title warn">Warning — This Asset Has Active Draft References</div>
           <div className="med-banner-sub">
-            Deleting this asset will break its reference in {usages.length} DRAFT submission{usages.length !== 1 ? "s" : ""}. The contributor will be prompted to replace the asset before submitting.
+            Deleting this asset will break its reference in {usages.length} {referenceLabel}. The contributor will be prompted to replace the asset before submitting.
           </div>
         </div>
       </div>
       <p style={{ fontSize: 13, color: "var(--med-text-2)", marginBottom: 16, lineHeight: 1.6 }}>
-        The following DRAFT submission{usages.length !== 1 ? "s" : ""} will have a broken asset reference after deletion:
+        The following submission{usages.length !== 1 ? "s" : ""} will have a broken asset reference after deletion:
       </p>
+      {usages.length === 0 && (
+        <p style={{ fontSize: 13, color: "var(--med-text-2)", marginBottom: 16, lineHeight: 1.6 }}>
+          This asset has a recoverable draft or revision reference, but the linked submission details are not available in this response.
+        </p>
+      )}
       {usages.map((usage) => (
         <div key={usage.submissionId} className="med-conflict-ref" style={{ marginBottom: 8 }}>
           <div>
             <div className="med-conflict-title">{usage.submissionTitle}</div>
             <div style={{ marginTop: 4 }}>
-              <span className="med-badge med-badge-draft">Draft</span>
+              <span className={`med-badge ${submissionStatusBadge[usage.submissionStatus] ?? "med-badge-draft"}`}>
+                {submissionStatusLabel[usage.submissionStatus] ?? usage.submissionStatus}
+              </span>
             </div>
             <div className="med-conflict-sub">Submitted {formatUploadDate(usage.submittedAt)}</div>
           </div>
-          <a className="med-jump-link" href={`/submissions/${usage.submissionId}`}>
-            View Draft
+          <Link
+            className="med-jump-link"
+            to={`/submissions/${encodeURIComponent(usage.submissionId)}`}
+            state={{ returnTo: "/media-repository" }}
+          >
+            View Submission
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
               <polyline points="15,3 21,3 21,9" />
               <line x1="10" y1="14" x2="21" y2="3" />
             </svg>
-          </a>
+          </Link>
         </div>
       ))}
       <p style={{ fontSize: 12, color: "var(--med-muted)", marginTop: 16, lineHeight: 1.5 }}>

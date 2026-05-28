@@ -1,7 +1,9 @@
 import type { CalendarEvent } from "../../api/calendarApi";
+import { getSubmission } from "../../api/submissionApi";
+import type { SavedMediaAsset, SubmissionSummary } from "../../api/submissionApi";
 import type { User } from "../../types/auth.types";
 import { statusColor, statusLabel } from "./calendarStatus";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 function formatDatetime(iso: string) {
@@ -27,6 +29,9 @@ export default function CalendarEventDetailModal({
   onClose,
 }: CalendarEventDetailModalProps) {
   const drawerBodyRef = useRef<HTMLDivElement>(null);
+  const [submissionDetail, setSubmissionDetail] = useState<SubmissionSummary | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
 
   useEffect(() => {
     if (!event) return;
@@ -42,12 +47,43 @@ export default function CalendarEventDetailModal({
     };
   }, [event, onClose]);
 
+  useEffect(() => {
+    if (!event) {
+      setSubmissionDetail(null);
+      setDetailError(false);
+      setDetailLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setSubmissionDetail(null);
+    setDetailError(false);
+    setDetailLoading(true);
+
+    getSubmission(event.id, controller.signal)
+      .then((response) => {
+        setSubmissionDetail(response.data);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || error?.name === "CanceledError") return;
+        setDetailError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDetailLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [event]);
+
   useLayoutEffect(() => {
     if (!event) return;
     drawerBodyRef.current?.scrollTo({ top: 0, left: 0 });
   }, [event]);
 
   if (!event) return null;
+
+  const mediaAssets = submissionDetail?.mediaAssets ?? [];
+  const caption = submissionDetail?.caption?.trim();
 
   return createPortal(
     <div
@@ -134,17 +170,20 @@ export default function CalendarEventDetailModal({
             <div className="cal-detail-row">
               <span className="cal-detail-label">Caption</span>
               <span className="cal-detail-value cal-detail-muted">
-                Caption preview is not included in the calendar feed yet.
+                {detailLoading
+                  ? "Loading caption..."
+                  : caption || "No caption attached to this scheduled post."}
               </span>
             </div>
           </details>
 
-          <details className="cal-drawer-disclosure">
+          <details className="cal-drawer-disclosure" open>
             <summary>Media Preview</summary>
-            <div className="cal-detail-media-placeholder">
-              <i className="ti ti-photo" aria-hidden="true" />
-              <span>Media preview unavailable from calendar feed</span>
-            </div>
+            <CalendarMediaPreview
+              assets={mediaAssets}
+              loading={detailLoading}
+              error={detailError}
+            />
           </details>
 
           {role === "admin" && (
@@ -163,6 +202,71 @@ export default function CalendarEventDetailModal({
     </div>,
     document.body,
   );
+}
+
+function CalendarMediaPreview({
+  assets,
+  loading,
+  error,
+}: {
+  assets: SavedMediaAsset[];
+  loading: boolean;
+  error: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="cal-media-preview-loading" aria-label="Loading media preview">
+        <span />
+        <span />
+      </div>
+    );
+  }
+
+  if (assets.length > 0) {
+    return (
+      <div className={`cal-media-preview-grid${assets.length === 1 ? " is-single" : ""}`}>
+        {assets.map((asset, index) => (
+          <figure className="cal-media-preview-item" key={asset.id}>
+            {isVideoAsset(asset) ? (
+              <video
+                src={asset.storageUrl}
+                controls
+                preload="metadata"
+                playsInline
+                aria-label={`Video attachment ${index + 1}: ${asset.fileName}`}
+              />
+            ) : (
+              <img
+                src={asset.storageUrl}
+                alt={asset.fileName || `Media attachment ${index + 1}`}
+                loading="lazy"
+              />
+            )}
+            <figcaption>
+              <span>{index + 1}</span>
+              {isVideoAsset(asset) ? "Video" : "Image"}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="cal-detail-media-placeholder">
+      <i className={error ? "ti ti-lock" : "ti ti-photo"} aria-hidden="true" />
+      <span>
+        {error
+          ? "Media preview is unavailable for this calendar item."
+          : "No media attached. This may be a text-only post."}
+      </span>
+    </div>
+  );
+}
+
+function isVideoAsset(asset: SavedMediaAsset) {
+  const type = asset.fileType.toLowerCase();
+  return ["mp4", "mov", "webm", "video"].some((value) => type.includes(value));
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {

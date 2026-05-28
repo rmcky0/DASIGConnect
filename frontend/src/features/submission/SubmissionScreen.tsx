@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   attachAsset,
   createDraft,
@@ -110,6 +110,8 @@ const statusLabels: Record<SubmissionStatus, string> = {
 
 export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { submissionId: routeSubmissionId } = useParams<{ submissionId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { submissions, setSubmissions, loading, error, refresh } =
     useSubmissions();
@@ -121,6 +123,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const toast = useToast();
   const detailsSectionRef = useRef<HTMLElement | null>(null);
   const prefilledRef = useRef(false);
+  const routedSubmissionRef = useRef<string | null>(null);
   const [filter, setFilter] = useState<QueueFilter>("drafts");
   const [form, setForm] = useState<FormState>(initialForm);
   const [pickerItems, setPickerItems] = useState<SubmissionMediaItem[]>([]);
@@ -333,6 +336,26 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     })();
   }, [searchParams, toast]);
 
+  useEffect(() => {
+    const submissionId = routeSubmissionId ?? searchParams.get("submissionId");
+    if (!submissionId) {
+      routedSubmissionRef.current = null;
+      return;
+    }
+    if (routedSubmissionRef.current === submissionId) return;
+    routedSubmissionRef.current = submissionId;
+    setFilter("submitted");
+    setCenterMode("edit");
+    void applySubmission({
+      id: submissionId,
+      institutionId: user.institutionId || "",
+      institutionName: user.inst,
+      eventTitle: "",
+      eventDate: "",
+      status: "pending",
+    });
+  }, [routeSubmissionId, searchParams, user.inst, user.institutionId]);
+
   function clearAssetIdParam() {
     if (!searchParams.has("assetIds")) return;
     const next = new URLSearchParams(searchParams);
@@ -409,6 +432,15 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   }
 
   function handleBack() {
+    const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
+    if (routeSubmissionId) {
+      if (returnTo && window.history.length > 1) {
+        navigate(-1);
+        return;
+      }
+      window.location.assign(returnTo || "/media-repository");
+      return;
+    }
     if (hasUnsavedDraftChanges) {
       setModal("draft-exit");
       return;
