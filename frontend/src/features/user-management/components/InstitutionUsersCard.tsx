@@ -224,7 +224,6 @@ export default function InstitutionUsersCard({
                         </span>
                         <div>
                           <strong>{displayName}</strong>
-                          <span className="um-table-sub">{managedUser.email}</span>
                         </div>
                       </div>
                     </td>

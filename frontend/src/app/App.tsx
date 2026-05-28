@@ -754,6 +754,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/submissions/:submissionId"
+          element={
+            <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator", "contributor"]}>
+              <SubmissionScreen user={currentUser!} />
+            </ProtectedRoute>
+          }
+        />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

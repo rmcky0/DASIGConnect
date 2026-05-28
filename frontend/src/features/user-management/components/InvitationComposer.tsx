@@ -59,7 +59,6 @@ export default function InvitationComposer({
           </div>
         </div>
         <div className="um-composer-header-meta">
-          <span className="um-composer-priority">Primary workflow</span>
           {recipientCount > 0 && (
             <span className={`um-composer-count${atLimit ? ' is-limit' : ''}`}>
               {recipientCount} / 15 recipients
@@ -170,15 +169,6 @@ export default function InvitationComposer({
         )}
 
         <div className="um-composer-footer">
-          <div className="um-csv-hint">
-            <span className="um-csv-icon">
-              <i className="ti ti-file-type-csv" aria-hidden="true"></i>
-            </span>
-            <span>
-              CSV bulk import
-              <strong>Planned</strong>
-            </span>
-          </div>
           <button
             type="submit"
             className="um-send-btn"

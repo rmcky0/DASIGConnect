@@ -272,6 +272,9 @@
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
   transform: translateY(-1px);
 }
+.notif-tab.active:hover {
+  color: #FFFFFF;
+}
 .notif-tab:active {
   transform: translateY(0);
 }
@@ -532,11 +535,19 @@
   border-color: #2563EB;
 }
 
+.notif-page-contributor .notif-tab.active:hover {
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  border-color: #2563EB;
+}
+
 .notif-page-contributor .notif-tab-count {
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
 .notif-page-contributor .notif-tab.active .notif-tab-count {
+  background: rgba(255, 255, 255, 0.24);
+  color: #FFFFFF;
   transform: scale(1.04);
 }
 
@@ -715,6 +726,12 @@
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
 }
 
+.notif-page-validator .notif-tab.active:hover {
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  border-color: #2563EB;
+}
+
 .notif-page-validator .notif-tab-count {
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
@@ -725,6 +742,8 @@
 }
 
 .notif-page-validator .notif-tab.active .notif-tab-count {
+  background: rgba(255, 255, 255, 0.24);
+  color: #FFFFFF;
   transform: scale(1.04);
 }
 
@@ -839,6 +858,12 @@
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
 }
 
+.notif-page-admin .notif-tab.active:hover {
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  border-color: #2563EB;
+}
+
 .notif-page-admin .notif-tab-count {
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
@@ -849,6 +874,8 @@
 }
 
 .notif-page-admin .notif-tab.active .notif-tab-count {
+  background: rgba(255, 255, 255, 0.24);
+  color: #FFFFFF;
   transform: scale(1.04);
 }
 

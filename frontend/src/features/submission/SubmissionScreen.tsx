@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   attachAsset,
   createDraft,
@@ -111,6 +111,8 @@ const statusLabels: Record<SubmissionStatus, string> = {
 
 export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { submissionId: routeSubmissionId } = useParams<{ submissionId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { submissions, setSubmissions, loading, error, refresh } =
     useSubmissions();
@@ -122,6 +124,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   const toast = useToast();
   const detailsSectionRef = useRef<HTMLElement | null>(null);
   const prefilledRef = useRef(false);
+  const routedSubmissionRef = useRef<string | null>(null);
   const cleanSignatureRef = useRef(getDirtySignature(initialForm));
   const shouldPromptBeforeLeaveRef = useRef(false);
   const browserBackGuardRef = useRef(false);
@@ -371,6 +374,26 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     })();
   }, [searchParams, toast]);
 
+  useEffect(() => {
+    const submissionId = routeSubmissionId ?? searchParams.get("submissionId");
+    if (!submissionId) {
+      routedSubmissionRef.current = null;
+      return;
+    }
+    if (routedSubmissionRef.current === submissionId) return;
+    routedSubmissionRef.current = submissionId;
+    setFilter("submitted");
+    setCenterMode("edit");
+    void applySubmission({
+      id: submissionId,
+      institutionId: user.institutionId || "",
+      institutionName: user.inst,
+      eventTitle: "",
+      eventDate: "",
+      status: "pending",
+    });
+  }, [routeSubmissionId, searchParams, user.inst, user.institutionId]);
+
   function clearAssetIdParam() {
     if (!searchParams.has("assetIds")) return;
     const next = new URLSearchParams(searchParams);
@@ -420,6 +443,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
   }
 
   function exitSubmission() {
+    const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
     setModal(null);
     setPendingLeaveAction(null);
     setForm(initialForm);
@@ -432,7 +456,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     setSaveState("idle");
     cleanSignatureRef.current = getDirtySignature(initialForm);
     browserBackGuardRef.current = false;
-    navigate("/dashboard", { replace: true });
+    navigate(routeSubmissionId ? returnTo || "/media-repository" : "/dashboard", { replace: true });
   }
 
   function handleNewSubmission() {

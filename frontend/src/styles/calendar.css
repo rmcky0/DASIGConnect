@@ -43,7 +43,7 @@
   border-radius: var(--r-lg);
   background: var(--d-surface);
   box-shadow: 0 10px 26px rgba(10, 22, 40, 0.05);
-  margin-bottom: 18px;
+  margin: 0 0 18px;
 }
 
 .screen-actions {
@@ -258,16 +258,18 @@
   border: 1px solid var(--cal-line);
   border-radius: var(--r);
   box-shadow: 0 6px 18px rgba(10, 22, 40, 0.03);
+  position: relative;
+  z-index: 30;
 }
 
 .cal-filter-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 174px;
+  min-width: 190px;
 }
 
-.cal-filter-field label {
+.cal-filter-label {
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -275,25 +277,37 @@
   color: var(--d-muted);
 }
 
-.cal-filter-field select {
-  height: 37px;
-  padding: 0 38px 0 12px;
+.dc-select.cal-filter-select {
+  min-width: 190px;
+  width: 100%;
+}
+
+.dc-select.cal-filter-select.is-open {
+  z-index: 4200;
+}
+
+.dc-select.cal-filter-select .dc-select-trigger {
+  min-height: 38px;
   border: 1.5px solid #d7e2f2;
   border-radius: var(--r-sm);
-  color: var(--d-text);
   background: var(--cal-surface-soft);
   font-family: var(--ff-body);
   font-size: 13px;
-  font-weight: 600;
-  outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+  font-weight: 700;
+  padding: 8px 12px;
 }
 
-.cal-filter-field select:focus,
-.cal-filter-field select:hover {
+.dc-select.cal-filter-select .dc-select-trigger:hover:not(:disabled),
+.dc-select.cal-filter-select .dc-select-trigger.open {
   background: #fff;
   border-color: var(--d-blue);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+}
+
+.dc-select.cal-filter-select .dc-select-popover {
+  z-index: 4201;
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(10, 22, 40, 0.16);
 }
 
 /* ---- Empty / error / loading states ---- */
@@ -1232,6 +1246,87 @@
 .cal-detail-media-placeholder i {
   font-size: 27px;
   color: var(--d-blue);
+}
+
+.cal-media-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cal-media-preview-grid.is-single {
+  grid-template-columns: 1fr;
+}
+
+.cal-media-preview-item {
+  position: relative;
+  min-height: 156px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #d7e4f5;
+  border-radius: var(--r);
+  background: #eef4fb;
+  box-shadow: 0 8px 18px rgba(10, 22, 40, 0.07);
+}
+
+.cal-media-preview-grid.is-single .cal-media-preview-item {
+  min-height: 240px;
+}
+
+.cal-media-preview-item img,
+.cal-media-preview-item video {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  display: block;
+  object-fit: cover;
+  background: #0f172a;
+}
+
+.cal-media-preview-item video {
+  object-fit: contain;
+}
+
+.cal-media-preview-item figcaption {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(10, 22, 40, 0.78);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  backdrop-filter: blur(8px);
+}
+
+.cal-media-preview-item figcaption span {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--d-blue);
+}
+
+.cal-media-preview-loading {
+  min-height: 176px;
+  display: grid;
+  gap: 10px;
+}
+
+.cal-media-preview-loading span {
+  border-radius: var(--r);
+  background: linear-gradient(90deg, #eef4fb 0%, #f8fbff 45%, #e6eef8 90%);
+  background-size: 220% 100%;
+  animation: cal-shimmer 1.2s ease-in-out infinite;
+}
+
+.cal-media-preview-loading span:first-child {
+  min-height: 128px;
 }
 
 .cal-detail-status-block {
