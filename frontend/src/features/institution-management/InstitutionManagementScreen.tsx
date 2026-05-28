@@ -29,6 +29,7 @@ interface InstitutionWithStats {
   name: string
   code: string
   emailDomain: string
+  status: string
   contributors: number
   validators: number
   pendingInvitations: number
@@ -120,6 +121,7 @@ const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
           name: item.name,
           code: item.institutionCode,
           emailDomain: item.emailDomain,
+          status: item.status,
           contributors: 0,
           validators: 0,
           pendingInvitations: 0,
@@ -169,6 +171,7 @@ const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
             name: selectedInstitution.name,
             code: selectedInstitution.code,
             emailDomain: selectedInstitution.emailDomain,
+            status: selectedInstitution.status,
           }
         : null,
     [selectedInstitution],
@@ -234,7 +237,8 @@ const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
     setActiveTab('invitations')
     setEmailChips([])
     setEmailDraft('')
-    setInviteRole(null)
+    // Pre-select validator role for non-active institutions since contributors cannot be invited yet
+    setInviteRole(inst.status === 'active' ? null : 'validator')
     setInviteResults(null)
     setPendingInvitations([])
     setManagedUsers([])
@@ -273,6 +277,7 @@ const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
         name: response.data.name,
         code: response.data.institutionCode,
         emailDomain: response.data.emailDomain,
+        status: response.data.status,
         contributors: 0,
         validators: 0,
         pendingInvitations: 0,
@@ -658,7 +663,10 @@ const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
               <i className="ti ti-building-community" aria-hidden="true"></i>
             </div>
             <div className="im-detail-info">
-              <h1 className="im-detail-name">{selectedInstitution.name}</h1>
+              <div className="im-detail-name-row">
+                <h1 className="im-detail-name">{selectedInstitution.name}</h1>
+                <InstitutionStatusBadge status={selectedInstitution.status} />
+              </div>
               <div className="im-detail-meta">
                 {selectedInstitution.code && (
                   <span className="im-meta-chip">
@@ -736,12 +744,28 @@ const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
               aria-labelledby="im-tab-invitations"
               className="um-tab-panel"
             >
+              {selectedInstitution?.status === 'inactive' && (
+                <div className="alert alert-info im-status-banner" role="status">
+                  <i className="ti ti-info-circle" aria-hidden="true"></i>
+                  <div>
+                    <strong>Institution is inactive.</strong> Invite a validator to activate this workspace. Contributors can only be invited once the institution is active.
+                  </div>
+                </div>
+              )}
+              {selectedInstitution?.status === 'pending' && (
+                <div className="alert alert-warn im-status-banner" role="status">
+                  <i className="ti ti-clock" aria-hidden="true"></i>
+                  <div>
+                    <strong>Awaiting validator activation.</strong> A validator invitation has been sent. Contributors can be invited once the validator activates their account.
+                  </div>
+                </div>
+              )}
               <InvitationComposer
                 chips={emailChips}
                 emailDraft={emailDraft}
                 role={inviteRole}
                 selectedInstitution={selectedInstitutionOption}
-                canChooseRole={true}
+                canChooseRole={selectedInstitution?.status === 'active'}
                 sending={sending}
                 onDraftChange={setEmailDraft}
                 onAddChip={(email) => {
@@ -989,7 +1013,10 @@ function InstitutionCard({ institution, onManage }: InstitutionCardProps) {
           <i className="ti ti-building-community" aria-hidden="true"></i>
         </div>
         <div className="im-inst-card-info">
-          <h2 className="im-inst-card-name">{institution.name}</h2>
+          <div className="im-inst-card-name-row">
+            <h2 className="im-inst-card-name">{institution.name}</h2>
+            <InstitutionStatusBadge status={institution.status} />
+          </div>
           <div className="im-inst-card-meta">
             {institution.code && (
               <span className="im-inst-card-chip">
@@ -1072,6 +1099,33 @@ function MetricCard({ icon, label, value, loading, accent }: MetricCardProps) {
         )}
       </div>
     </div>
+  )
+}
+
+// ── InstitutionStatusBadge ────────────────────────────────────────────────────
+
+function InstitutionStatusBadge({ status }: { status: string }) {
+  if (status === 'active') {
+    return (
+      <span className="im-status-badge is-active">
+        <i className="ti ti-circle-check-filled" aria-hidden="true"></i>
+        Active
+      </span>
+    )
+  }
+  if (status === 'pending') {
+    return (
+      <span className="im-status-badge is-pending">
+        <i className="ti ti-clock" aria-hidden="true"></i>
+        Pending
+      </span>
+    )
+  }
+  return (
+    <span className="im-status-badge is-inactive">
+      <i className="ti ti-circle-x" aria-hidden="true"></i>
+      Inactive
+    </span>
   )
 }
 

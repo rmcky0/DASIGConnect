@@ -107,6 +107,7 @@ export default function UserInvitationsScreen({ user }: UserInvitationsScreenPro
           name: user.inst?.trim() || 'Institution',
           code: '',
           emailDomain: '',
+          status: 'active',
         },
       ])
       setSelectedInstitutionId(user.institutionId)
