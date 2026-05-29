@@ -4,6 +4,7 @@ import com.dasigconnect.backend.model.entity.MediaAsset;
 import com.dasigconnect.backend.repository.AssetTagRepository;
 import com.dasigconnect.backend.repository.MediaAssetRepository;
 import com.dasigconnect.backend.service.AIClassificationService;
+import com.dasigconnect.backend.service.MediaIngestionQueueService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,13 +28,16 @@ public class EmbeddingReconciliationJob {
     private final MediaAssetRepository mediaAssetRepository;
     private final AssetTagRepository assetTagRepository;
     private final AIClassificationService aiClassificationService;
+    private final MediaIngestionQueueService mediaIngestionQueueService;
 
     public EmbeddingReconciliationJob(MediaAssetRepository mediaAssetRepository,
                                       AssetTagRepository assetTagRepository,
-                                      AIClassificationService aiClassificationService) {
+                                      AIClassificationService aiClassificationService,
+                                      MediaIngestionQueueService mediaIngestionQueueService) {
         this.mediaAssetRepository = mediaAssetRepository;
         this.assetTagRepository = assetTagRepository;
         this.aiClassificationService = aiClassificationService;
+        this.mediaIngestionQueueService = mediaIngestionQueueService;
     }
 
     @Scheduled(fixedDelay = 300_000)
@@ -46,7 +50,7 @@ public class EmbeddingReconciliationJob {
         for (MediaAsset asset : pending) {
             try {
                 if (asset.getFileType() != null && asset.getFileType().isImage()) {
-                    aiClassificationService.classifyAndEmbed(asset.getId(), asset.getStorageUrl());
+                    mediaIngestionQueueService.enqueue(asset.getId(), asset.getStorageUrl());
                     continue;
                 }
 

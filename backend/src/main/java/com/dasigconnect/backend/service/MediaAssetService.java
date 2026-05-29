@@ -56,7 +56,7 @@ public class MediaAssetService {
     private final MediaAssetEmbeddingRepository mediaAssetEmbeddingRepository;
     private final SubmissionService submissionService;
     private final SupabaseStorageService supabaseStorageService;
-    private final AIClassificationService aiClassificationService;
+    private final MediaIngestionQueueService mediaIngestionQueueService;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -69,7 +69,7 @@ public class MediaAssetService {
             MediaAssetEmbeddingRepository mediaAssetEmbeddingRepository,
             SubmissionService submissionService,
             SupabaseStorageService supabaseStorageService,
-            AIClassificationService aiClassificationService) {
+            MediaIngestionQueueService mediaIngestionQueueService) {
         this.mediaAssetRepository = mediaAssetRepository;
         this.submissionRepository = submissionRepository;
         this.submissionMediaAssetRepository = submissionMediaAssetRepository;
@@ -77,7 +77,7 @@ public class MediaAssetService {
         this.mediaAssetEmbeddingRepository = mediaAssetEmbeddingRepository;
         this.submissionService = submissionService;
         this.supabaseStorageService = supabaseStorageService;
-        this.aiClassificationService = aiClassificationService;
+        this.mediaIngestionQueueService = mediaIngestionQueueService;
     }
 
     @Transactional(readOnly = true)
@@ -254,16 +254,17 @@ public class MediaAssetService {
         asset.setStatus(MediaAssetStatus.PROCESSING);
         asset = mediaAssetRepository.save(asset);
 
-        // Trigger async classification + embedding — never blocks the upload response
+        // Enqueue classification + embedding on the bounded ingestion pool — never blocks
+        // the upload response (UC-4.2, ADR-0002).
         final UUID savedId = asset.getId();
         final String savedUrl = asset.getStorageUrl();
         final MediaFileType savedType = asset.getFileType();
         try {
             if (savedType.isImage()) {
-                aiClassificationService.classifyAndEmbed(savedId, savedUrl);
+                mediaIngestionQueueService.enqueue(savedId, savedUrl);
             }
         } catch (Exception e) {
-            log.warn("Failed to trigger AI classification for asset {}: {}", savedId, e.getMessage());
+            log.warn("Failed to enqueue AI classification for asset {}: {}", savedId, e.getMessage());
         }
 
         return MediaAssetDetailDto.from(asset, List.of(), List.of());

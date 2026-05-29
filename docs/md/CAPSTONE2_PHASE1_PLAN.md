@@ -151,7 +151,7 @@ Each is one card / one branch (`feat/uc41-...`, `feat/uc42-queue`):
 4. ✅ **Assign + bulk move/tag slice** (backend; done 2026-05-30; `MediaOrganizationService`/`Controller`: bulk-move/unfile + bulk-tag, institution-guarded + audited; bulk-delete already existed; 10 tests; full suite 320 green). UI deferred to slices 3/6.
 5. ✅ **Album backend slice** (done 2026-05-30; `MediaAlbumService`/`Controller` + DTOs: CRUD, add/remove assets, set cover; audited; 15 tests pass; full suite 310 green).
 6. **Album UI slice** (album grid, open album, add/remove selected, cover).
-7. **Ingestion-queue infra** (executor config + service + enrichment refactor) + tests.
+7. ✅ **Ingestion-queue infra** (done 2026-05-30; `IngestionExecutorConfig` bounded 2-worker pool + `MediaIngestionQueueService.enqueue` with skip-if-READY idempotency; `classifyAndEmbed` de-`@Async`'d; upload + reconciliation repointed to the queue; 4 tests; full suite 324 green; context boots clean). Import-batch *grouping* deferred to a follow-up.
 8. **Spike — 200-asset dump** (D5): measure wall-clock to all-`READY`, max concurrent
    Hikari connections (must stay ≤5, 0 timeouts), `FAILED` count. Record the throughput
    number in `docs/eval/`.

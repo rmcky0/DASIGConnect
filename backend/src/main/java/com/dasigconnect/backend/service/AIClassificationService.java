@@ -12,7 +12,6 @@ import com.dasigconnect.backend.repository.AssetTagRepository;
 import com.dasigconnect.backend.repository.MediaAssetRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.ZoneOffset;
@@ -30,7 +29,9 @@ import java.util.UUID;
  *
  * Transaction discipline: each repository call runs in its own short implicit transaction.
  * No DB connection is held across external API calls (Claude or Voyage AI).
- * All methods are @Async — failures are logged and swallowed so upload is never blocked.
+ * This is the enrichment <em>worker</em>: it runs on the bounded ingestion pool via
+ * {@link MediaIngestionQueueService} (ADR-0002), not as fire-and-forget {@code @Async}.
+ * Failures are logged and swallowed so upload is never blocked.
  */
 @Service
 public class AIClassificationService {
@@ -65,7 +66,6 @@ public class AIClassificationService {
      * @param assetId    UUID of the saved MediaAsset
      * @param storageUrl Supabase Storage URL used as image input for Claude
      */
-    @Async
     public void classifyAndEmbed(UUID assetId, String storageUrl) {
         // Step 1: Classify via Claude Vision (external HTTP, no DB connection held)
         MediaClassificationDto result;
