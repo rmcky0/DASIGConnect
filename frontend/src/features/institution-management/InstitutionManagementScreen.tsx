@@ -1052,10 +1052,8 @@ function InstitutionCard({ institution, onManage, onDelete }: InstitutionCardPro
           <i className="ti ti-building-community" aria-hidden="true"></i>
         </div>
         <div className="im-inst-card-info">
-          <div className="im-inst-card-name-row">
-            <h2 className="im-inst-card-name">{institution.name}</h2>
-            <InstitutionStatusBadge status={institution.status} />
-          </div>
+          <h2 className="im-inst-card-name">{institution.name}</h2>
+          <InstitutionStatusBadge status={institution.status} />
           <div className="im-inst-card-meta">
             {institution.code && (
               <span className="im-inst-card-chip">
