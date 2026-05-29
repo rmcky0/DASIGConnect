@@ -196,6 +196,55 @@
 
 .im-inst-card-chip i { font-size: 11px; }
 
+/* ---- Institution status badge ---- */
+.im-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: var(--ff-body);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  align-self: flex-start;
+  margin-top: 7px;
+  transition:
+    opacity 140ms ease,
+    transform 120ms ease,
+    box-shadow 140ms ease;
+}
+
+.im-status-badge i {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.im-status-badge.is-active {
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.im-status-badge.is-pending {
+  background: #fef9c3;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.im-status-badge.is-inactive {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.im-inst-card:hover .im-status-badge {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
 /* ---- Card stats row ---- */
 .im-inst-card-stats {
   display: flex;

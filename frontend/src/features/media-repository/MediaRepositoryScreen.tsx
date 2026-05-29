@@ -38,6 +38,11 @@ function isConflict(error: unknown) {
   return (error as { response?: { status?: number } }).response?.status === 409;
 }
 
+function isCanceledRequest(error: unknown) {
+  if (typeof error !== "object" || error === null) return false;
+  return (error as { name?: string }).name === "CanceledError";
+}
+
 function safeFileName(fileName: string) {
   return fileName.replace(/[^a-zA-Z0-9._-]/g, "-");
 }
@@ -138,9 +143,22 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
 
   useEffect(() => {
     if (!isAdmin) return;
-    listInstitutions()
-      .then((res) => setInstitutions(res.data))
-      .catch(() => toast.error("Could not load institution filters."));
+    const controller = new AbortController();
+    let active = true;
+
+    listInstitutions(controller.signal)
+      .then((res) => {
+        if (active) setInstitutions(res.data);
+      })
+      .catch((err: unknown) => {
+        if (!active || isCanceledRequest(err)) return;
+        toast.error("Could not load institution filters.");
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [isAdmin, toast]);
 
   const filteredAssets = useMemo(() => {

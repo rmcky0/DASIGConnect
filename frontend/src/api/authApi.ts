@@ -99,8 +99,8 @@ export function createInstitution(
   });
 }
 
-export function listInstitutions() {
-  return api.get<InstitutionResponse[]>("/institutions");
+export function listInstitutions(signal?: AbortSignal) {
+  return api.get<InstitutionResponse[]>("/institutions", { signal });
 }
 
 export function deleteInstitution(id: string) {
