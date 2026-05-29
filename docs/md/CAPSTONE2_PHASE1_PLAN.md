@@ -146,7 +146,7 @@ a `Semaphore`/`RateLimiter`.
 Each is one card / one branch (`feat/uc41-...`, `feat/uc42-queue`):
 
 1. ✅ **V28 migration + entities + repos** (done 2026-05-30; applied to dev DB → v28; RLS in-migration; compiles, boots clean).
-2. **Folder CRUD backend slice** + `MediaFolderControllerTest`, `MediaFolderServiceTest`.
+2. ✅ **Folder CRUD backend slice** (done 2026-05-30; `MediaFolderService`/`Controller` + DTOs, audit on every change, depth/cycle guards; 13 tests pass; full suite 295 green).
 3. **Folder UI slice** (tree, create/rename/delete, list by folder).
 4. **Assign + bulk move/tag/delete slice** (backend + UI + tests).
 5. **Album backend slice** (CRUD + add/remove/cover, many-to-many) + tests.

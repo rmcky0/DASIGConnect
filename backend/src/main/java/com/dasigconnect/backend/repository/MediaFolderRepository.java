@@ -28,4 +28,6 @@ public interface MediaFolderRepository extends JpaRepository<MediaFolder, UUID> 
                                    @Param("parentId") UUID parentId);
 
     boolean existsByParentFolderId(UUID parentFolderId);
+
+    long countByParentFolderId(UUID parentFolderId);
 }

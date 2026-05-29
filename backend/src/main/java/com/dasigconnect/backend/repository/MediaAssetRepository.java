@@ -35,6 +35,7 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
 
     boolean existsByAssetCode(String assetCode);
     boolean existsByUploaderId(UUID uploaderId);
+    long countByFolderIdAndDeletedAtIsNull(UUID folderId);
 
     @Modifying
     @Transactional
