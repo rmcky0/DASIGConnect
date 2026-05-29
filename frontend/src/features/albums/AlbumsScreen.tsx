@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { User } from "../../types/auth.types";
 import {
   listAlbums,
@@ -13,6 +14,10 @@ import {
 } from "../../api/albumApi";
 import { searchMediaAssets, type MediaAsset } from "../../api/mediaApi";
 import { useToast } from "../../context/ToastContext";
+import AlbumCard from "./components/AlbumCard";
+import AlbumAssetTile from "./components/AlbumAssetTile";
+import CreateAlbumModal from "./components/CreateAlbumModal";
+import AssetPickerModal from "./components/AssetPickerModal";
 import "../../styles/media-repository.css";
 import "../../styles/albums.css";
 
@@ -20,15 +25,10 @@ interface AlbumsScreenProps {
   user: User;
 }
 
-const IMAGE_TYPES = new Set(["jpeg", "jpg", "png", "webp", "gif"]);
-
-function isImage(fileType: string) {
-  return IMAGE_TYPES.has(fileType.toLowerCase());
-}
-
 export default function AlbumsScreen({ user }: AlbumsScreenProps) {
   void user; // albums are scoped server-side by the caller's institution
   const toast = useToast();
+  const navigate = useNavigate();
 
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,8 +38,6 @@ export default function AlbumsScreen({ user }: AlbumsScreenProps) {
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
 
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -89,14 +87,12 @@ export default function AlbumsScreen({ user }: AlbumsScreenProps) {
     }
   }
 
-  async function handleCreate() {
+  async function handleCreate(name: string, description: string) {
     if (!name.trim()) return;
     setCreating(true);
     try {
       const album = await createAlbum({ name: name.trim(), description: description.trim() || null });
       setCreateOpen(false);
-      setName("");
-      setDescription("");
       setAlbums((prev) => [album, ...prev]);
       toast.success(`Album "${album.name}" created.`);
     } catch {
@@ -155,11 +151,12 @@ export default function AlbumsScreen({ user }: AlbumsScreenProps) {
 
   async function handleRemoveAsset(assetId: string) {
     if (!openAlbum) return;
+    const albumId = openAlbum.id;
     try {
-      await removeAlbumAsset(openAlbum.id, assetId);
+      await removeAlbumAsset(albumId, assetId);
       await refreshDetail();
       setAlbums((prev) =>
-        prev.map((a) => (a.id === openAlbum.id ? { ...a, assetCount: Math.max(0, a.assetCount - 1) } : a)),
+        prev.map((a) => (a.id === albumId ? { ...a, assetCount: Math.max(0, a.assetCount - 1) } : a)),
       );
     } catch {
       toast.error("Could not remove the asset.");
@@ -179,7 +176,6 @@ export default function AlbumsScreen({ user }: AlbumsScreenProps) {
 
   // ── Detail view ───────────────────────────────────────────────────────────
   if (openAlbum) {
-    const coverable = openAlbum.assets;
     return (
       <div className="med-page">
         <div className="med-header">
@@ -205,44 +201,27 @@ export default function AlbumsScreen({ user }: AlbumsScreenProps) {
           </div>
         </div>
 
-        {coverable.length === 0 ? (
+        {openAlbum.assets.length === 0 ? (
           <div className="med-empty">
             <div className="med-empty-title">This album is empty</div>
             <p className="med-empty-sub">Use “Add assets” to put media into this album.</p>
           </div>
         ) : (
           <div className="alb-grid">
-            {coverable.map((asset) => (
-              <figure key={asset.id} className="alb-asset">
-                <div className="alb-asset-thumb">
-                  {isImage(asset.fileType) ? (
-                    <img src={asset.storageUrl} alt={asset.fileName} loading="lazy" />
-                  ) : (
-                    <span className="alb-asset-file">{asset.fileType.toUpperCase()}</span>
-                  )}
-                  {openAlbum.coverAssetId === asset.id && <span className="alb-cover-badge">Cover</span>}
-                  <div className="alb-asset-actions">
-                    <button type="button" title="Set as cover" aria-label="Set as cover" onClick={() => void handleSetCover(asset.id)}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                      </svg>
-                    </button>
-                    <button type="button" title="Remove from album" aria-label="Remove from album" onClick={() => void handleRemoveAsset(asset.id)}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <figcaption className="alb-asset-name">{asset.fileName}</figcaption>
-              </figure>
+            {openAlbum.assets.map((asset) => (
+              <AlbumAssetTile
+                key={asset.id}
+                asset={asset}
+                isCover={openAlbum.coverAssetId === asset.id}
+                onSetCover={(id) => void handleSetCover(id)}
+                onRemove={(id) => void handleRemoveAsset(id)}
+              />
             ))}
           </div>
         )}
 
         {pickerOpen && (
-          <AssetPicker
+          <AssetPickerModal
             assets={pickerAssets}
             loading={pickerLoading}
             selected={pickerSelected}
@@ -261,6 +240,13 @@ export default function AlbumsScreen({ user }: AlbumsScreenProps) {
     <div className="med-page">
       <div className="med-header">
         <div>
+          <button className="alb-back" type="button" onClick={() => navigate("/media-repository")}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12,19 5,12 12,5" />
+            </svg>
+            Media Repository
+          </button>
           <h1 className="med-title">Albums</h1>
           <p className="med-subtitle">Curated collections · an asset can live in many albums</p>
         </div>
@@ -288,114 +274,25 @@ export default function AlbumsScreen({ user }: AlbumsScreenProps) {
       ) : (
         <div className="alb-list">
           {albums.map((album) => (
-            <article key={album.id} className="alb-card" onClick={() => void openDetail(album.id)}>
-              <div className="alb-card-cover">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21,15 16,10 5,21" />
-                </svg>
-              </div>
-              <div className="alb-card-body">
-                <div className="alb-card-name">
-                  {album.name}
-                  {album.source === "ai_suggested" && <span className="alb-ai-badge">AI</span>}
-                </div>
-                <div className="alb-card-meta">{album.assetCount} {album.assetCount === 1 ? "asset" : "assets"}</div>
-                {album.description && <p className="alb-card-desc">{album.description}</p>}
-              </div>
-              <button
-                className="alb-card-delete"
-                type="button"
-                aria-label={`Delete album ${album.name}`}
-                onClick={(e) => { e.stopPropagation(); void handleDeleteAlbum(album); }}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3,6 5,6 21,6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
-            </article>
+            <AlbumCard
+              key={album.id}
+              album={album}
+              onOpen={(id) => void openDetail(id)}
+              onDelete={(a) => void handleDeleteAlbum(a)}
+            />
           ))}
         </div>
       )}
 
       {createOpen && (
-        <div className="alb-modal-overlay" role="dialog" aria-modal="true" aria-label="Create album" onClick={() => { if (!creating) setCreateOpen(false); }}>
-          <div className="alb-modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="alb-modal-title">New Album</h2>
-            <label className="alb-field">
-              <span>Name</span>
-              <input autoFocus value={name} maxLength={150} onChange={(e) => setName(e.target.value)} placeholder="e.g. Graduation 2026" />
-            </label>
-            <label className="alb-field">
-              <span>Description <em>(optional)</em></span>
-              <textarea value={description} maxLength={1000} rows={3} onChange={(e) => setDescription(e.target.value)} />
-            </label>
-            <div className="alb-modal-actions">
-              <button className="med-btn med-btn-ghost med-btn-sm" type="button" disabled={creating} onClick={() => setCreateOpen(false)}>Cancel</button>
-              <button className="med-btn med-btn-primary med-btn-sm" type="button" disabled={creating || !name.trim()} onClick={() => void handleCreate()}>
-                {creating ? "Creating…" : "Create"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <CreateAlbumModal
+          creating={creating}
+          onCancel={() => setCreateOpen(false)}
+          onCreate={(name, description) => void handleCreate(name, description)}
+        />
       )}
 
       {detailLoading && <div className="alb-loading-veil">Opening album…</div>}
-    </div>
-  );
-}
-
-function AssetPicker({
-  assets, loading, selected, adding, onToggle, onClose, onConfirm,
-}: {
-  assets: MediaAsset[];
-  loading: boolean;
-  selected: Set<string>;
-  adding: boolean;
-  onToggle: (id: string) => void;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div className="alb-modal-overlay" role="dialog" aria-modal="true" aria-label="Add assets to album" onClick={onClose}>
-      <div className="alb-modal alb-modal-wide" onClick={(e) => e.stopPropagation()}>
-        <h2 className="alb-modal-title">Add assets</h2>
-        {loading ? (
-          <div className="alb-picker-empty">Loading assets…</div>
-        ) : assets.length === 0 ? (
-          <div className="alb-picker-empty">No assets available to add.</div>
-        ) : (
-          <div className="alb-picker-grid">
-            {assets.map((asset) => {
-              const checked = selected.has(asset.id);
-              return (
-                <button
-                  key={asset.id}
-                  type="button"
-                  className={`alb-picker-item${checked ? " checked" : ""}`}
-                  aria-pressed={checked}
-                  onClick={() => onToggle(asset.id)}
-                >
-                  {isImage(asset.fileType) ? (
-                    <img src={asset.storageUrl} alt={asset.fileName} loading="lazy" />
-                  ) : (
-                    <span className="alb-asset-file">{asset.fileType.toUpperCase()}</span>
-                  )}
-                  {checked && <span className="alb-picker-check" aria-hidden="true">✓</span>}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        <div className="alb-modal-actions">
-          <button className="med-btn med-btn-ghost med-btn-sm" type="button" disabled={adding} onClick={onClose}>Cancel</button>
-          <button className="med-btn med-btn-primary med-btn-sm" type="button" disabled={adding || selected.size === 0} onClick={onConfirm}>
-            {adding ? "Adding…" : `Add ${selected.size > 0 ? selected.size : ""}`.trim()}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

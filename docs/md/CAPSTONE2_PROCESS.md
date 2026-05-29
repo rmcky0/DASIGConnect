@@ -107,9 +107,9 @@ is safe and so a future document submission is a formality rather than a rewrite
   - **No hardcoded/duplicated UI blocks** copy-pasted across pages — lift them into a
     component. No giant single-file screens doing everything.
   - Reuse the existing design tokens/CSS classes; don't re-style ad hoc per page.
-  - *Refactor debt to revisit:* `AlbumsScreen.tsx` works but is on the large side — its
-    album card, asset tile, create modal, and asset picker should be split into
-    `features/albums/components/` when next touched.
+  - *Worked example:* `AlbumsScreen.tsx` is a thin orchestrator (data + handlers) composing
+    `features/albums/components/` (`AlbumCard`, `AlbumAssetTile`, `CreateAlbumModal`,
+    `AssetPickerModal`) with a shared `isImage` helper — follow this shape for new screens.
 - **ADRs** for non-obvious decisions in `docs/adr/` (append-only; supersede, don't edit).
 
 ## 5. Definition of Done (per card)
