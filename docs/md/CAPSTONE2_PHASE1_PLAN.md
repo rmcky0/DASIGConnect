@@ -148,7 +148,7 @@ Each is one card / one branch (`feat/uc41-...`, `feat/uc42-queue`):
 1. ✅ **V28 migration + entities + repos** (done 2026-05-30; applied to dev DB → v28; RLS in-migration; compiles, boots clean).
 2. ✅ **Folder CRUD backend slice** (done 2026-05-30; `MediaFolderService`/`Controller` + DTOs, audit on every change, depth/cycle guards; 13 tests pass; full suite 295 green).
 3. **Folder UI slice** (tree, create/rename/delete, list by folder).
-4. **Assign + bulk move/tag/delete slice** (backend + UI + tests).
+4. ✅ **Assign + bulk move/tag slice** (backend; done 2026-05-30; `MediaOrganizationService`/`Controller`: bulk-move/unfile + bulk-tag, institution-guarded + audited; bulk-delete already existed; 10 tests; full suite 320 green). UI deferred to slices 3/6.
 5. ✅ **Album backend slice** (done 2026-05-30; `MediaAlbumService`/`Controller` + DTOs: CRUD, add/remove assets, set cover; audited; 15 tests pass; full suite 310 green).
 6. **Album UI slice** (album grid, open album, add/remove selected, cover).
 7. **Ingestion-queue infra** (executor config + service + enrichment refactor) + tests.

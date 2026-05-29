@@ -112,6 +112,20 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
     @Query(value = "UPDATE media_assets SET status = :status WHERE id = :id", nativeQuery = true)
     void updateStatus(@Param("id") UUID id, @Param("status") String status);
 
+    @Modifying
+    @Transactional
+    @Query("UPDATE MediaAsset m SET m.folderId = :folderId "
+            + "WHERE m.id IN :ids AND m.institution.id = :institutionId AND m.deletedAt IS NULL")
+    int assignToFolder(@Param("ids") List<UUID> ids,
+                       @Param("folderId") UUID folderId,
+                       @Param("institutionId") UUID institutionId);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE MediaAsset m SET m.folderId = NULL "
+            + "WHERE m.id IN :ids AND m.institution.id = :institutionId AND m.deletedAt IS NULL")
+    int unfileAssets(@Param("ids") List<UUID> ids, @Param("institutionId") UUID institutionId);
+
     @Query(value = """
         SELECT * FROM media_assets
         WHERE deleted_at IS NOT NULL
