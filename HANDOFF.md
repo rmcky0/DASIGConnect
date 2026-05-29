@@ -1,96 +1,119 @@
-# Handoff - 2026-05-22
+# Handoff - 2026-05-28 (Session 9)
 
-Current branch: `feature/uc13-submission-backend`
+## What Was Done This Session
 
-## Status
+- **AI Media Library upgrade docs were reviewed and corrected.**
+  - Updated `docs/md/ai-media-library-upgrade.md` with the main pre-implementation fixes:
+    - removed duplicate artwork examples,
+    - added `ai_tags` to the Claude JSON shape,
+    - clarified `ai_caption` / `ai_tags` storage,
+    - fixed `embedding_type` vs `type`,
+    - clarified Voyage image vs text embedding usage,
+    - added `ma.status = 'READY'` and `deleted_at IS NULL` filtering,
+    - added unique `(asset_id, embedding_type)` index and upsert guidance,
+    - expanded soft-delete/hard-delete cleanup,
+    - added migration safety notes.
 
-### Backend
+- **AI Media Library backend implementation started from the MD basis.**
+  - Added dual embedding support with `media_asset_embeddings`.
+  - Added media asset status lifecycle: `PROCESSING`, `READY`, `FAILED`, `DELETED`.
+  - Claude classification now returns richer structured media metadata including `ai_tags`.
+  - Voyage integration separates multimodal image embedding from text/semantic embedding.
+  - AI suggestion search now excludes deleted/non-ready media assets.
+  - Soft delete cleanup now clears embeddings/tags and marks media deleted.
+  - Added Flyway migration `V25__media_asset_dual_embeddings.sql`.
 
-- Done: UC-1.3 submission backend endpoints on `/api/v1/submissions`.
-- Done: required merge-blocking tests:
-  - `SubmissionServiceTest`
-  - `SubmissionControllerTest`
-  - `UserServiceTest`
-  - `UserControllerTest`
-- Done: `GlobalExceptionHandler` now returns `400 Bad Request` for missing request parameters instead of falling through to generic server error handling.
-- Done: `InstitutionController` now exposes canonical `/api/v1/institutions` and keeps `/api/v1/admin/institutions` as a legacy alias.
-- Done: M2 stragglers remain in place: resend invitation, `GET /me`, scoped user listing, and user role counts.
-- Done: pending invitation endpoints are available on `/api/v1/invitations/pending` and `/api/v1/invitations/pending/count`.
-- Done: invitation lifecycle is hardened so creating/resending an invitation invalidates older unused, unexpired tokens for the same recipient email.
-- Done: `GET /api/v1/users/counts` now applies the same validator institution scope rule as user listing.
-- Done: Flyway duplicate version conflict fixed by keeping `V3__ensure_institution_email_domain.sql` and renaming the media migration to `V4__media_assets.sql`.
-- Done: local datasource config supports `DASIG_DATABASE_*` overrides first, then standard `DATABASE_*` variables, with a local JDBC fallback. This avoids accidental unresolved/provider-style database URLs during local runs.
-- Done: backend Supabase config supports `DASIG_SUPABASE_URL`, `DASIG_SUPABASE_SERVICE_ROLE_KEY`, and `DASIG_SUPABASE_STORAGE_BUCKET`.
-- Done: Flyway fresh Supabase startup is fixed by using baseline version `0`; a new Supabase `public` schema now baselines at `0` and runs V1 through V4 instead of skipping V1.
-- Done locally: guard rail enforcement can be disabled with `APP_GUARDRAILS_ENFORCED=false` for testing. Local default is currently false so GR-H1/GR-H2/GR-H3 do not block draft save or submit-for-review testing.
-- Done locally: guard rail reservation failures return structured `422` responses with violation details instead of generic internal server errors.
+- **Submit Content UX updates.**
+  - Submission wizard step order changed to:
+    1. Post Details
+    2. Media Assets
+    3. Preferred Schedule
+  - New and loaded drafts open on Post Details first so title/caption/tags exist before AI media suggestion.
+  - Back navigation no longer asks to save when the draft is already saved.
+  - Back navigation still prompts when there are unsaved draft changes.
+  - Local file input can reselect the same batch after selection.
+  - Media Repository upload modal now supports selecting/dropping multiple local assets and uploads them sequentially with aggregate progress.
 
-### Frontend
+- **Duplicate Facebook publish bug diagnosed and fixed.**
+  - Supabase showed duplicate successful publication attempts:
+    - `2c405cb4-1d0d-4e52-a7be-8a9c0fd92a73`
+    - `d3ab4d3b-af1a-420c-b76c-a6f71802bb7a`
+  - Root cause: `PublishingSchedulerJob` could pick the same `scheduled` submission in overlapping scheduler runs or app instances before the first run updated it to `published`.
+  - Fix: added an atomic publish-claim step before Facebook API calls:
+    - `scheduled -> publishing`
+    - `direct_post_scheduled -> direct_post_publishing`
+  - Only the process that successfully updates the DB row can publish. Later overlapping runs skip the row.
+  - Immediate direct posts now use the same claim flow to avoid racing the scheduler.
+  - Added Flyway migration `V26__submission_publishing_claim_status.sql`.
 
-- Done: submission API wiring now matches the backend:
-  - `POST /api/v1/submissions` for draft creation.
-  - `POST /api/v1/submissions/{id}/evaluate-slot` with `{ scheduledAt }`.
-  - Direct browser upload to Supabase Storage, then `POST /api/v1/submissions/{id}/media` with `{ storageUrl, fileName, fileType, fileSizeBytes }`.
-  - `GET/POST /api/v1/institutions`.
-  - Lookup typing now matches backend constants: file types, size limits, media limits, and schedule lead windows.
-- Done: reset password screen and `/reset-password` route are wired to `POST /api/v1/auth/reset-password`.
-- Done: session warning infrastructure now reads JWT `exp`, starts a five-minute countdown, and opens the expiry modal at timeout.
-- Done: dashboard stat tiles are no longer all hardcoded zero; they use live submission/user/institution/pending-invitation endpoints where backend support exists.
-- Done: app auth state hydrates from `GET /api/v1/me` after login, invite accept, session modal relogin, and saved-token restore. This prevents Gmail/domain guessing from overriding the real institution.
-- Done: invite/manage modal now lists pending invitations and current users for the selected institution, including resend actions for active pending invites.
-- Done locally: user management now has a reusable `UserManagementPanel` with selected-user details and deactivate/reactivate actions wired to `PATCH /api/v1/users/{id}/status`.
-- Done locally: invite validator flow warns when the selected institution already has active validators, but allows the administrator to proceed after confirmation.
-- Done locally: `.jpg` files are normalized to `jpeg` for submission readiness and backend media metadata.
-- Done locally: submission queue styling has been improved with a clearer left-side queue panel, count badge, item containers, hover state, and active state.
-- Done locally: frontend submit buttons are no longer blocked by readiness score during testing, and draft payloads use safe defaults for blank required backend fields.
-- Done locally: `frontend/.env.local` points Vite to `http://localhost:8080/api/v1` and contains the Supabase browser upload variables for the `dasigconnect-media` bucket. This file is intentionally ignored and should not be committed.
+## Files Changed This Session
+
+**Backend:**
+- `backend/src/main/java/com/dasigconnect/backend/model/entity/SubmissionStatus.java`
+- `backend/src/main/java/com/dasigconnect/backend/repository/SubmissionRepository.java`
+- `backend/src/main/java/com/dasigconnect/backend/schedule/PublishingSchedulerJob.java`
+- `backend/src/main/java/com/dasigconnect/backend/service/PublishingQueryService.java`
+- `backend/src/main/java/com/dasigconnect/backend/service/FacebookPublisherService.java`
+- `backend/src/main/java/com/dasigconnect/backend/service/DirectPostService.java`
+- `backend/src/main/resources/db/migration/V26__submission_publishing_claim_status.sql`
+- `backend/src/test/java/com/dasigconnect/backend/schedule/PublishingSchedulerJobTest.java`
+- `backend/src/test/java/com/dasigconnect/backend/service/PublishingQueryServiceTest.java`
+
+**AI Media backend work from this session:**
+- `backend/src/main/resources/db/migration/V25__media_asset_dual_embeddings.sql`
+- `backend/src/main/java/com/dasigconnect/backend/model/entity/MediaAssetEmbedding.java`
+- `backend/src/main/java/com/dasigconnect/backend/model/entity/MediaAssetEmbeddingType.java`
+- `backend/src/main/java/com/dasigconnect/backend/model/entity/MediaAssetStatus.java`
+- `backend/src/main/java/com/dasigconnect/backend/repository/MediaAssetEmbeddingRepository.java`
+- plus updates to Claude/Voyage clients, media asset services, recommendation service, retention service, and related tests.
+
+**Frontend:**
+- `frontend/src/api/submissionApi.ts`
+- `frontend/src/components/media/UploadMediaTab.tsx`
+- `frontend/src/features/media-repository/components/UploadModal.tsx`
+- `frontend/src/features/submission/SubmissionScreen.tsx`
+
+**Docs:**
+- `docs/md/ai-media-library-upgrade.md`
+- `HANDOFF.md`
+- `CLAUDE.md`
+- `TASKS.md`
 
 ## Verification
 
-- Frontend: `npm.cmd run build` passed.
-- Backend focused auth/onboarding verification: `.\mvnw.cmd '-Dtest=InvitationServiceTest,InvitationControllerTest,UserServiceTest,UserControllerTest' test` passed.
-- Backend focused result: `Tests run: 50, Failures: 0, Errors: 0, Skipped: 0`.
-- Backend: `mvn test` passed using the local Maven distribution because `.\mvnw.cmd` fails in this PowerShell environment.
-- Backend result: `Tests run: 163, Failures: 0, Errors: 0, Skipped: 0`.
-- Flyway duplicate migration check: source and generated `target/classes/db/migration` now have unique versions `V1`, `V2`, `V3`, and `V4`; `mvn clean` and `mvn -DskipTests package` passed.
-- Fresh Supabase DB check: backend applied V1 through V4 successfully, then a second startup validated migrations and started with 0 pending migrations.
-- Latest frontend check after local Supabase env wiring: `npm.cmd run build` passed.
-- Latest focused submission backend check: `SlotReservationServiceTest`, `SubmissionServiceTest`, and `SubmissionControllerTest` passed.
-- Latest focused submission backend result: 42 tests, 0 failures, 0 errors.
+- Backend full test suite:
+  - `.\mvnw.cmd test`
+  - Result: **273 tests, 0 failures, 0 errors**
+- Focused publish-claim tests:
+  - `.\mvnw.cmd test "-Dtest=PublishingQueryServiceTest,PublishingSchedulerJobTest"`
+  - Result: **4 tests, 0 failures**
+- Frontend production build:
+  - `npm.cmd run build`
+  - Result: **passed**
+  - Existing Vite chunk-size warning remains.
 
-Backend test command used:
+## Important Notes
 
-```powershell
-& "$env:USERPROFILE\.m2\wrapper\dists\apache-maven-3.9.15\0226a00282e400185496f3b60ec5a3f029cbdc6893912937d4876d57695224e1\bin\mvn.cmd" test
-```
+- Existing duplicate Facebook posts already created for the two affected submissions must be cleaned manually from Facebook if needed. The backend fix prevents future duplicate publishes but cannot remove already-created posts.
+- Apply Flyway migrations on backend restart before browser E2E:
+  - `V25__media_asset_dual_embeddings.sql`
+  - `V26__submission_publishing_claim_status.sql`
+- During AI media implementation, do **not** delete the old `media_assets.embedding` column immediately. The migration strategy keeps old and new embedding paths compatible while search is moved to `media_asset_embeddings`.
+- For AI features in Submit Content, saving a draft first is intentional because the backend needs a stable `submissionId` and saved media/context before running AI caption and AI media suggestion flows.
 
-## Remaining Gaps
+## What's Next
 
-- Active Module 1 blocker: save draft and submit-for-review are not yet considered solved. Backend guard rail blocking has been bypassed for testing and frontend payload defaults were added, but the browser flow still needs manual debugging/verification against the current backend and Supabase setup.
-- Submission queue design improved locally, but still needs user/team review with real queue data and responsive/mobile widths.
-- `GET /api/v1/submissions/lookups` does not provide categories, tags, or preferred time slots. The frontend no longer assumes those fields, but richer category/tag UI needs backend support.
-- `AssetPickerModal` / media library still needs UC-2.2 backend: `MediaAssetController`, especially `GET /api/v1/media-assets` and delete behavior.
-- Validator review queue actions still need UC-2.1 backend: approve, reject, needs-revision, and validator/admin transition rules.
-- SSE notifications still need UC-2.3 backend.
-- Analytics still need UC-2.4 backend aggregate endpoints.
-- Calendar, publishing, Facebook fallback, AI captions, and AI recommendations still need UC-3.x backend.
-- No built-in validator account exists. Validators must be invited from the administrator dashboard, accept the invite, and set their password.
-- Supabase browser upload credentials are configured locally. The full browser upload flow still needs manual verification through the submission form. Required frontend env vars are:
-  - `VITE_SUPABASE_URL`
-  - `VITE_SUPABASE_STORAGE_BUCKET`
-  - `VITE_SUPABASE_ANON_KEY`
-- Local frontend/backend connection requires `frontend/.env.local` with `VITE_API_URL=http://localhost:8080/api/v1`.
-- Backend runtime still needs deployment-owned SMTP and Supabase service credentials in deployed environments. Local SMTP and Supabase values are configured through ignored env files.
-- `.\mvnw.cmd` may require network access to resolve dependencies in this environment; rerun with normal Maven/network permissions if dependency resolution fails.
-
-## Critical Invariants
-
-- `MediaAsset.embedding` is not mapped by Hibernate. Keep pgvector reads/writes in native repository queries.
-- Keep HikariCP max pool size at 5 for Supabase Session Pooler.
-- Keep `DATABASE_USER` / `DATABASE_USERNAME` environment naming aligned with `application.properties` and local `.env`.
-- Prefer local `DASIG_DATABASE_*` variables when testing locally to avoid collisions with provider/system `DATABASE_URL` values.
-- For fresh Supabase projects, keep Flyway baseline version at `0`; baseline version `1` marks V1 as applied without creating Module 1 tables.
-- Media upload pattern is frontend direct-to-Supabase first, backend metadata second. Do not switch Module 1 endpoints to multipart upload.
-- Invitation tokens are single-use in practice: issuing a fresh invite/resend supersedes older open links for the same email.
-- Do not log JWTs, reset tokens, invitation tokens, passwords, or API keys.
-- Do not edit generated migration files under `backend/target`; fix Flyway issues only in `backend/src/main/resources/db/migration`.
+1. Restart backend so Flyway applies V25 and V26.
+2. Run browser E2E for:
+   - Submit Content step order and draft-exit prompt behavior.
+   - Multi-file local upload from Submit Content and Media Repository.
+   - AI Caption after saving draft.
+   - AI Media Suggestions after title/caption/tags exist and draft is saved.
+   - Scheduled Facebook publishing once, confirming only one `publication_attempts.result = 'success'` row per submission.
+3. In Supabase, optionally audit current duplicates:
+   ```sql
+   SELECT submission_id, result, COUNT(*)
+   FROM publication_attempts
+   GROUP BY submission_id, result
+   HAVING COUNT(*) > 1;
+   ```

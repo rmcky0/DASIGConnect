@@ -16,8 +16,12 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
+@EnableScheduling
+@EnableAsync
 public class BackendApplication {
 
     public static void main(String[] args) {
@@ -68,6 +72,9 @@ public class BackendApplication {
                 .baselineVersion(baselineVersion)
                 .load();
 
+        flyway.repair();
+        flyway.migrate();
+        System.out.println("Flyway migrate() completed.");
         System.out.println("==================================================");
         return flyway;
     }
@@ -128,6 +135,8 @@ public class BackendApplication {
                     System.out.println("No administrator found. Seeding default administrator...");
                     com.dasigconnect.backend.model.entity.User admin = new com.dasigconnect.backend.model.entity.User();
                     admin.setEmail(adminEmail);
+                    admin.setFirstName("DASIG");
+                    admin.setLastName("Administrator");
                     admin.setRole(com.dasigconnect.backend.model.entity.UserRole.administrator);
                     admin.setPasswordHash(passwordEncoder.encode("admin123"));
                     admin.setAccountState(com.dasigconnect.backend.model.entity.UserStatus.active);

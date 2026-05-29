@@ -6,10 +6,14 @@ export type SubmissionStatus =
   | "in_review"
   | "needs_revision"
   | "scheduled"
+  | "publishing"
   | "publish_failed"
   | "published"
   | "published_manual"
   | "admin_direct_post"
+  | "direct_post_scheduled"
+  | "direct_post_publishing"
+  | "direct_post_failed"
   | "rejected";
 
 export interface SavedMediaAsset {
@@ -24,6 +28,7 @@ export interface SubmissionSummary {
   id: string;
   institutionId: string;
   institutionName?: string;
+  contributorEmail?: string;
   eventTitle: string;
   eventDate: string;
   caption?: string;
@@ -31,6 +36,7 @@ export interface SubmissionSummary {
   status: SubmissionStatus;
   scheduledAt?: string;
   submittedAt?: string;
+  createdAt?: string;
   updatedAt?: string;
   mediaCount?: number;
   category?: string;
@@ -96,6 +102,22 @@ export function submitForReview(id: string) {
 
 export function deleteDraft(id: string) {
   return api.delete<void>(`/submissions/${id}`);
+}
+
+export function reorderSubmissionMedia(id: string, mediaAssetIds: string[]) {
+  return api.patch<SubmissionSummary>(`/submissions/${id}/media/order`, {
+    mediaAssetIds,
+  });
+}
+
+export function attachAsset(id: string, mediaAssetId: string) {
+  return api.post<SubmissionSummary>(`/submissions/${id}/assets`, {
+    mediaAssetId,
+  });
+}
+
+export function detachAsset(id: string, mediaAssetId: string) {
+  return api.delete(`/submissions/${id}/assets/${mediaAssetId}`);
 }
 
 export async function uploadSubmissionMedia(id: string, files: File[]) {

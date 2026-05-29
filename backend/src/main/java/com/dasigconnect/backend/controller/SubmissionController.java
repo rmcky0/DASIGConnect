@@ -24,6 +24,7 @@ import com.dasigconnect.backend.model.dto.submission.SignedUploadUrlResponse;
 import com.dasigconnect.backend.model.dto.submission.SlotEvaluateRequestDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionCreateDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionLookupsDto;
+import com.dasigconnect.backend.model.dto.submission.SubmissionMediaOrderDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionResponseDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionSummaryDto;
 import com.dasigconnect.backend.model.dto.submission.SubmissionUpdateDto;
@@ -173,6 +174,19 @@ public class SubmissionController {
     }
 
     /**
+     * PATCH /api/v1/submissions/{id}/media/order Updates display_order for
+     * media already attached to a DRAFT or NEEDS_REVISION submission.
+     */
+    @PatchMapping("/{id}/media/order")
+    @PreAuthorize("hasRole('CONTRIBUTOR')")
+    public ResponseEntity<SubmissionResponseDto> reorderMedia(
+            @PathVariable UUID id,
+            @Valid @RequestBody SubmissionMediaOrderDto dto,
+            @AuthenticationPrincipal JwtUserDetails user) {
+        return ResponseEntity.ok(submissionService.reorderMedia(id, dto, user));
+    }
+
+    /**
      * POST /api/v1/submissions/{id}/assets Attaches an existing media library
      * asset to a submission. Used by the media recommendation panel and
      * AssetPickerModal.
@@ -184,5 +198,15 @@ public class SubmissionController {
             @Valid @RequestBody AttachAssetDto dto,
             @AuthenticationPrincipal JwtUserDetails user) {
         return ResponseEntity.status(HttpStatus.CREATED).body(submissionService.attachAsset(id, dto, user));
+    }
+
+    @DeleteMapping("/{id}/assets/{assetId}")
+    @PreAuthorize("hasRole('CONTRIBUTOR')")
+    public ResponseEntity<Void> detachAsset(
+            @PathVariable UUID id,
+            @PathVariable UUID assetId,
+            @AuthenticationPrincipal JwtUserDetails user) {
+        submissionService.detachAsset(id, assetId, user);
+        return ResponseEntity.noContent().build();
     }
 }

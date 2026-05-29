@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -85,13 +86,16 @@ export interface ToastControls {
 
 export function useToast(): ToastControls {
   const { add, dismiss } = useToastContext()
-  return {
-    success: (msg, duration) => add(msg, 'success', duration),
-    error:   (msg, duration) => add(msg, 'error',   duration),
-    info:    (msg, duration) => add(msg, 'info',     duration),
-    warning: (msg, duration) => add(msg, 'warning',  duration),
-    dismiss,
-  }
+  return useMemo<ToastControls>(
+    () => ({
+      success: (msg, duration) => add(msg, 'success', duration),
+      error:   (msg, duration) => add(msg, 'error',   duration),
+      info:    (msg, duration) => add(msg, 'info',     duration),
+      warning: (msg, duration) => add(msg, 'warning',  duration),
+      dismiss,
+    }),
+    [add, dismiss],
+  )
 }
 
 export function useToastItems(): ToastItem[] {

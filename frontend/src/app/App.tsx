@@ -26,7 +26,14 @@ import InviteScreen from "../features/auth/InviteScreen";
 import NoAccountScreen from "../features/auth/NoAccountScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import SubmissionScreen from "../features/submission/SubmissionScreen";
+import ValidationQueueScreen from "../features/validation/ValidationQueueScreen";
 import UserInvitationsScreen from "../features/user-management/UserInvitationsScreen";
+import InstitutionManagementScreen from "../features/institution-management/InstitutionManagementScreen";
+import CalendarScreen from "../features/calendar/CalendarScreen";
+import ResolutionCenterScreen from "../features/resolution/ResolutionCenterScreen";
+import MediaRepositoryScreen from "../features/media-repository/MediaRepositoryScreen";
+import NotificationsScreen from "../features/notifications/NotificationsScreen";
+import AnalyticsDashboardPage from "../features/analytics/AnalyticsDashboardPage";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import SessionModal from "../components/modals/SessionModal";
 import Toast from "../components/common/Toast";
@@ -34,6 +41,12 @@ import LoginSplash from "../components/common/LoginSplash";
 import PageLoader from "../components/common/PageLoader";
 import ProtectedRoute from "../components/common/ProtectedRoute";
 import { useToast } from "../context/ToastContext";
+import {
+  fallbackDisplayNameFromEmail,
+  getUserDisplayName,
+  getUserInitials,
+  initialsFromEmail,
+} from "../lib/userIdentity";
 
 const LOCKOUT_LIMIT = 5;
 const LOCKOUT_SECONDS = 15 * 60;
@@ -50,6 +63,7 @@ function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -62,6 +76,7 @@ function App() {
   const [modalEmail, setModalEmail] = useState("");
   const [modalPassword, setModalPassword] = useState("");
   const [modalError, setModalError] = useState(false);
+  const [modalLoginLoading, setModalLoginLoading] = useState(false);
   const [showModalPassword, setShowModalPassword] = useState(false);
 
   const [forgotEmail, setForgotEmail] = useState("");
@@ -83,6 +98,8 @@ function App() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("");
   const [inviteInstitution, setInviteInstitution] = useState("");
+  const [inviteFirstName, setInviteFirstName] = useState("");
+  const [inviteLastName, setInviteLastName] = useState("");
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteConfirmPassword, setInviteConfirmPassword] = useState("");
   const [showInvitePassword, setShowInvitePassword] = useState(false);
@@ -102,6 +119,8 @@ function App() {
   const sessionWarningDismissedRef = useRef(false);
 
   const inviteRules = useMemo(() => {
+    const firstName = isValidProfileName(inviteFirstName);
+    const lastName = isValidProfileName(inviteLastName);
     const length = invitePassword.length >= 8;
     const upper = /[A-Z]/.test(invitePassword);
     const number = /[0-9]/.test(invitePassword);
@@ -109,34 +128,56 @@ function App() {
     const match =
       inviteConfirmPassword.length > 0 &&
       invitePassword === inviteConfirmPassword;
-    return { length, upper, number, symbol, match };
-  }, [invitePassword, inviteConfirmPassword]);
+    return { firstName, lastName, length, upper, number, symbol, match };
+  }, [inviteFirstName, inviteLastName, invitePassword, inviteConfirmPassword]);
 
   useEffect(() => {
+    let active = true;
     const savedToken = localStorage.getItem("dasigconnect_token");
     const savedUser = localStorage.getItem("dasigconnect_user");
-    if (savedToken && savedUser) {
-      setAuthToken(savedToken);
-      try {
-        const parsedUser = JSON.parse(savedUser) as User;
-        setCurrentUser(parsedUser);
-        startSessionCountdown(savedToken);
-        void refreshCurrentUser(parsedUser);
-      } catch {
-        localStorage.removeItem("dasigconnect_token");
-        localStorage.removeItem("dasigconnect_user");
-      }
+
+    if (!savedToken || !savedUser) {
+      setAuthReady(true);
+      return () => {
+        active = false;
+      };
     }
-    setAuthReady(true);
+
+    setAuthToken(savedToken);
+    queueMicrotask(() => {
+      void (async () => {
+        try {
+          const parsedUser = JSON.parse(savedUser) as User;
+          const user = await loadCurrentUser(parsedUser);
+          if (!active) return;
+          localStorage.setItem("dasigconnect_user", JSON.stringify(user));
+          setCurrentUser(user);
+          startSessionCountdown(savedToken);
+        } catch {
+          localStorage.removeItem("dasigconnect_token");
+          localStorage.removeItem("dasigconnect_user");
+          setAuthToken(null);
+          if (active) setCurrentUser(null);
+        } finally {
+          if (active) setAuthReady(true);
+        }
+      })();
+    });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
-    if (location.pathname !== "/reset-password") return;
+    if (!isPasswordResetPath(location.pathname)) return;
     const params = new URLSearchParams(location.search);
     const token = params.get("token");
     setResetToken(token);
     setResetError(token ? "" : "Reset token is missing or invalid.");
     setResetSuccess(false);
+    setResetPassword("");
+    setResetConfirmPassword("");
   }, [location.pathname, location.search]);
 
   useEffect(() => {
@@ -159,9 +200,14 @@ function App() {
         void handleLogin();
       } else if (location.pathname === "/forgot-password") {
         void handleForgotSubmit();
-      } else if (location.pathname === "/reset-password") {
+      } else if (isPasswordResetPath(location.pathname)) {
         void handleResetPassword();
-      } else if (location.pathname === "/dashboard" && showSessionModal) {
+      } else if (
+        location.pathname === "/dashboard" &&
+        showSessionModal &&
+        !modalLoginLoading &&
+        !logoutLoading
+      ) {
         void handleModalLogin();
       }
     }
@@ -175,6 +221,8 @@ function App() {
     loginPassword,
     modalEmail,
     modalPassword,
+    modalLoginLoading,
+    logoutLoading,
   ]);
 
   useEffect(() => {
@@ -216,6 +264,10 @@ function App() {
   async function handleLogin() {
     if (lockRemaining > 0) return;
     setLoginLoading(true);
+    setLoginError("");
+    setAuthToken(null);
+    localStorage.removeItem("dasigconnect_token");
+    localStorage.removeItem("dasigconnect_user");
     const email = loginEmail.trim().toLowerCase();
     try {
       const response = await login(email, loginPassword);
@@ -292,9 +344,20 @@ function App() {
 
   async function handleInviteActivate() {
     if (!inviteToken) return;
+    const firstName = normalizeProfileName(inviteFirstName);
+    const lastName = normalizeProfileName(inviteLastName);
+    if (!isValidProfileName(firstName) || !isValidProfileName(lastName)) {
+      toast.error("Please enter a valid first and last name.");
+      return;
+    }
     setInviteLoading(true);
     try {
-      const response = await acceptInvitation(inviteToken, invitePassword);
+      const response = await acceptInvitation({
+        token: inviteToken,
+        firstName,
+        lastName,
+        password: invitePassword,
+      });
       setAuthToken(response.data.accessToken);
       const email = inviteEmail.trim().toLowerCase();
       const fallbackUser = buildUserFromLogin(
@@ -307,8 +370,11 @@ function App() {
       localStorage.setItem("dasigconnect_user", JSON.stringify(user));
       setCurrentUser(user);
       startSessionCountdown(response.data.accessToken);
+      toast.success("Account activated. Welcome to DASIGConnect.");
       setInviteState("success");
+      navigate("/dashboard");
     } catch {
+      toast.error("We could not activate this invitation. Please request a new link.");
       setInviteState("expired");
     } finally {
       setInviteLoading(false);
@@ -316,6 +382,8 @@ function App() {
   }
 
   async function handleLogout() {
+    if (logoutLoading) return;
+    setLogoutLoading(true);
     try {
       await logoutRequest();
     } catch {
@@ -331,9 +399,13 @@ function App() {
     resetLoginState();
     navigate("/login");
     toast.info("You have been signed out.");
+    setLogoutLoading(false);
   }
 
   async function handleModalLogin() {
+    if (modalLoginLoading || logoutLoading) return;
+    setModalLoginLoading(true);
+    setModalError(false);
     const email = modalEmail.trim().toLowerCase();
     try {
       const response = await login(email, modalPassword);
@@ -346,8 +418,11 @@ function App() {
       startSessionCountdown(response.data.accessToken);
       setShowSessionModal(false);
       setModalError(false);
+      setModalPassword("");
     } catch {
       setModalError(true);
+    } finally {
+      setModalLoginLoading(false);
     }
   }
 
@@ -407,12 +482,6 @@ function App() {
     setBannerTimerId(timerId);
   }
 
-  async function refreshCurrentUser(fallbackUser: User) {
-    const user = await loadCurrentUser(fallbackUser);
-    localStorage.setItem("dasigconnect_user", JSON.stringify(user));
-    setCurrentUser(user);
-  }
-
   async function validateInviteToken(token: string) {
     try {
       const response = await validateInvitation(token);
@@ -421,6 +490,11 @@ function App() {
       setInviteRole(formatRoleLabel(data.assignedRole));
       setInviteInstitution(data.institutionName);
       setInviteCountdown(`Invitation expires ${formatExpiry(data.expiresAt)}`);
+      setInviteFirstName("");
+      setInviteLastName("");
+      setInvitePassword("");
+      setInviteConfirmPassword("");
+      setInviteState("form");
     } catch {
       setInviteState("expired");
     }
@@ -519,6 +593,30 @@ function App() {
         />
 
         <Route
+          path="/forgot-password/reset"
+          element={
+            <ResetPasswordScreen
+              active={true}
+              password={resetPassword}
+              confirmPassword={resetConfirmPassword}
+              showPassword={showResetPassword}
+              showConfirmPassword={showResetConfirmPassword}
+              loading={resetLoading}
+              error={resetError}
+              success={resetSuccess}
+              onPasswordChange={setResetPassword}
+              onConfirmPasswordChange={setResetConfirmPassword}
+              onTogglePassword={() => setShowResetPassword(!showResetPassword)}
+              onToggleConfirmPassword={() =>
+                setShowResetConfirmPassword(!showResetConfirmPassword)
+              }
+              onSubmit={() => void handleResetPassword()}
+              onBack={() => navigate("/login")}
+            />
+          }
+        />
+
+        <Route
           path="/invite"
           element={
             <InviteScreen
@@ -527,10 +625,14 @@ function App() {
               email={inviteEmail}
               roleLabel={inviteRole}
               institution={inviteInstitution}
+              firstName={inviteFirstName}
+              lastName={inviteLastName}
               password={invitePassword}
               confirmPassword={inviteConfirmPassword}
               rules={inviteRules}
               inviteCountdown={inviteCountdown}
+              onFirstNameChange={setInviteFirstName}
+              onLastNameChange={setInviteLastName}
               onPasswordChange={setInvitePassword}
               onConfirmPasswordChange={setInviteConfirmPassword}
               onTogglePassword={() =>
@@ -567,6 +669,7 @@ function App() {
                 onDismissBanner={dismissSessionBanner}
                 onStayLoggedIn={handleStayLoggedIn}
                 onLogout={() => void handleLogout()}
+                logoutLoading={logoutLoading}
               />
             ) : (
               <Navigate to="/login" replace />
@@ -578,10 +681,66 @@ function App() {
             element={<DashboardScreen user={currentUser!} />}
           />
           <Route
+            path="/admin/institution-management"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={["admin"]}>
+                <InstitutionManagementScreen user={currentUser!} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin/user-management/invitations"
             element={
               <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator"]}>
                 <UserInvitationsScreen user={currentUser!} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/validation/queue"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator"]}>
+                <ValidationQueueScreen user={currentUser!} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/scheduler/calendar"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator", "contributor"]}>
+                <CalendarScreen user={currentUser!} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/resolution"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={["admin"]}>
+                <ResolutionCenterScreen user={currentUser!} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/media-repository"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator", "contributor"]}>
+                <MediaRepositoryScreen user={currentUser!} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator", "contributor"]}>
+                <NotificationsScreen user={currentUser!} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator", "contributor"]}>
+                <AnalyticsDashboardPage user={currentUser!} />
               </ProtectedRoute>
             }
           />
@@ -595,6 +754,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/submissions/:submissionId"
+          element={
+            <ProtectedRoute user={currentUser} allowedRoles={["admin", "validator", "contributor"]}>
+              <SubmissionScreen user={currentUser!} />
+            </ProtectedRoute>
+          }
+        />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -604,10 +771,13 @@ function App() {
         email={modalEmail}
         password={modalPassword}
         error={modalError}
+        submitLoading={modalLoginLoading}
+        signOutLoading={logoutLoading}
         onEmailChange={setModalEmail}
         onPasswordChange={setModalPassword}
         onTogglePassword={() => setShowModalPassword(!showModalPassword)}
         onSubmit={() => void handleModalLogin()}
+        onSignOut={() => void handleLogout()}
         showPassword={showModalPassword}
       />
     </>
@@ -621,6 +791,10 @@ function formatTimer(seconds: number) {
   return `${minutes.toString().padStart(2, "0")}:${remaining
     .toString()
     .padStart(2, "0")}`;
+}
+
+function isPasswordResetPath(pathname: string) {
+  return pathname === "/reset-password" || pathname === "/forgot-password/reset";
 }
 
 function mapApiRole(role: string): User["role"] {
@@ -648,7 +822,10 @@ function buildUserFromLogin(
     email,
     pw: "",
     role: mapApiRole(apiUser.role),
-    name: displayNameFromEmail(email),
+    name: fallbackDisplayNameFromEmail(email),
+    firstName: null,
+    lastName: null,
+    displayName: null,
     inst: fallbackInstitutionName || institutionFallbackFromEmail(email),
     institutionId: apiUser.institutionId,
     initials: initialsFromEmail(email),
@@ -660,37 +837,24 @@ function buildUserFromProfile(
   fallbackEmail: string,
 ): User {
   const email = (profile.email || fallbackEmail).trim().toLowerCase();
+  const displayName = getUserDisplayName(profile);
   return {
     email,
     pw: "",
     role: mapApiRole(profile.role),
-    name: displayNameFromEmail(email),
+    name: displayName,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    displayName: profile.displayName,
     inst: profile.institutionName || institutionFallbackFromEmail(email),
     institutionId: profile.institutionId,
-    initials: initialsFromEmail(email),
+    initials: getUserInitials(profile),
   };
-}
-
-function displayNameFromEmail(email: string) {
-  const name = email.split("@")[0] || "User";
-  return name
-    .split(".")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function institutionFallbackFromEmail(email: string) {
   const emailDomain = email.split("@")[1]?.split(".")[0]?.toLowerCase() || "";
   return emailDomain.toUpperCase() || "Institution";
-}
-
-function initialsFromEmail(email: string) {
-  const name = email.split("@")[0] || "U";
-  const parts = name.split(".");
-  if (parts.length >= 2) {
-    return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase();
-  }
-  return name.substring(0, 2).toUpperCase();
 }
 
 function formatRoleLabel(role: string) {
@@ -720,6 +884,19 @@ function getTokenExpiryMs(token: string) {
   } catch {
     return null;
   }
+}
+
+function normalizeProfileName(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function isValidProfileName(value: string) {
+  const normalized = normalizeProfileName(value);
+  return (
+    normalized.length >= 1 &&
+    normalized.length <= 100 &&
+    /^[\p{L}][\p{L} '\-]*$/u.test(normalized)
+  );
 }
 
 function getApiErrorMessage(error: unknown, fallback: string) {

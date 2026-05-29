@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { User } from '../../types/auth.types'
+import { getGreetingName } from '../../lib/userIdentity'
 
 interface LoginSplashProps {
   user: User | null
@@ -33,7 +34,7 @@ export default function LoginSplash({ user, visible }: LoginSplashProps) {
   if (!mounted) return null
 
   const roleLabel = user ? (ROLE_LABEL[user.role] ?? 'Member') : null
-  const greeting = user?.name ? `Welcome back, ${user.name.split(' ')[0]}.` : 'Welcome to DASIGConnect.'
+  const greeting = user ? `Welcome back, ${getGreetingName(user)}.` : 'Welcome to DASIGConnect.'
 
   return (
     <div

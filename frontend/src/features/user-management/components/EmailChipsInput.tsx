@@ -7,6 +7,8 @@ interface EmailChipsInputProps {
   onAdd: (email: string) => void
   onRemove: (index: number) => void
   disabled?: boolean
+  placeholder?: string
+  inputId?: string
 }
 
 export default function EmailChipsInput({
@@ -16,6 +18,8 @@ export default function EmailChipsInput({
   onAdd,
   onRemove,
   disabled,
+  placeholder = 'Add recipient emails, then press Enter or comma...',
+  inputId,
 }: EmailChipsInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -89,9 +93,10 @@ export default function EmailChipsInput({
       ))}
       <input
         ref={inputRef}
+        id={inputId}
         type="email"
         className="um-chips-input"
-        placeholder={chips.length === 0 ? 'Type an email and press Enter or comma...' : ''}
+        placeholder={chips.length === 0 ? placeholder : ''}
         value={draft}
         onChange={(event) => handleChange(event.target.value)}
         onKeyDown={handleKeyDown}

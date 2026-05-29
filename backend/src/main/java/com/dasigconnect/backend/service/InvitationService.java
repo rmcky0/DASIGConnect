@@ -21,6 +21,7 @@ import com.dasigconnect.backend.model.dto.invitation.InvitationResponseDto;
 import com.dasigconnect.backend.model.dto.invitation.InvitationValidateResponseDto;
 import com.dasigconnect.backend.model.dto.invitation.PendingInvitationDto;
 import com.dasigconnect.backend.model.entity.Institution;
+import com.dasigconnect.backend.model.entity.InstitutionStatus;
 import com.dasigconnect.backend.model.entity.InvitationToken;
 import com.dasigconnect.backend.model.entity.User;
 import com.dasigconnect.backend.model.entity.UserRole;
@@ -45,6 +46,7 @@ public class InvitationService {
     private final JWTService jwtService;
     private final EmailService emailService;
     private final AuditLogService auditLogService;
+    private final InstitutionService institutionService;
 
     public InvitationService(
             InvitationTokenRepository invitationTokenRepository,
@@ -53,7 +55,8 @@ public class InvitationService {
             PasswordEncoder passwordEncoder,
             JWTService jwtService,
             EmailService emailService,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            InstitutionService institutionService) {
         this.invitationTokenRepository = invitationTokenRepository;
         this.userRepository = userRepository;
         this.entityManager = entityManager;
@@ -61,6 +64,7 @@ public class InvitationService {
         this.jwtService = jwtService;
         this.emailService = emailService;
         this.auditLogService = auditLogService;
+        this.institutionService = institutionService;
     }
 
     public InvitationResponseDto createInvitation(CreateInvitationRequestDto dto) {
@@ -78,8 +82,20 @@ public class InvitationService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Institution not found");
         }
         validateInviterScope(dto, inviter);
-        if (isValidator(inviter)) {
-            validateInstitutionEmailDomain(recipientEmail, institution);
+
+        // Enforce provisioning rules based on institution status
+        if (dto.assignedRole() == UserRole.contributor) {
+            if (institution.getStatus() != InstitutionStatus.active) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Contributors can only be invited to active institutions. "
+                        + "Invite a validator first to activate this institution.");
+            }
+        } else if (dto.assignedRole() == UserRole.validator) {
+            // Transition inactive → pending when the first validator invitation is sent
+            if (institution.getStatus() == InstitutionStatus.inactive) {
+                institutionService.transitionToPending(institution.getId());
+            }
+            // If already pending or active, the invitation proceeds without a status change
         }
 
         User invitedUser = userRepository.findByEmail(recipientEmail)
@@ -152,6 +168,8 @@ public class InvitationService {
         user.setEmail(token.getRecipientEmail());
         user.setRole(token.getAssignedRole());
         user.setInstitution(token.getInstitution());
+        user.setFirstName(normalizeName(dto.firstName()));
+        user.setLastName(normalizeName(dto.lastName()));
         user.setPasswordHash(passwordEncoder.encode(dto.password()));
         user.setAccountState(UserStatus.active);
         userRepository.save(user);
@@ -159,12 +177,25 @@ public class InvitationService {
         token.setUsedAt(Instant.now());
         invitationTokenRepository.save(token);
 
+        // Transition institution PENDING → ACTIVE when the first validator activates
+        if (token.getAssignedRole() == UserRole.validator) {
+            Institution institution = token.getInstitution();
+            InstitutionStatus status = institution.getStatus();
+            if (status == InstitutionStatus.pending || status == InstitutionStatus.inactive) {
+                institutionService.transitionToActive(institution.getId());
+            }
+        }
+
         auditLogService.record(
                 user,
                 "INVITATION_ACCEPTED",
                 null, null,
                 user.getId(),
-                Map.of("email", user.getEmail(), "role", user.getRole().name()));
+                Map.of(
+                        "email", user.getEmail(),
+                        "role", user.getRole().name(),
+                        "firstName", user.getFirstName(),
+                        "lastName", user.getLastName()));
 
         String jwt = jwtService.generateAccessToken(user);
         UUID institutionId = user.getInstitution().getId();
@@ -178,6 +209,10 @@ public class InvitationService {
         if (token.getExpiresAt().isBefore(Instant.now())) {
             throw new ResponseStatusException(HttpStatus.GONE, "Invitation has expired");
         }
+    }
+
+    private String normalizeName(String value) {
+        return value == null ? null : value.trim().replaceAll("\\s+", " ");
     }
 
     private User createPendingUser(String email, UserRole role, Institution institution) {
@@ -214,8 +249,6 @@ public class InvitationService {
 
     /**
      * Resends an invitation by generating a new token for the same recipient.
-     * Used when the original email was undelivered (pending_email_undelivered state).
-     * The original token record remains but is superseded by the new one.
      */
     public InvitationResponseDto resend(UUID tokenId, JwtUserDetails requester) {
         InvitationToken original = invitationTokenRepository.findById(tokenId)
@@ -230,7 +263,6 @@ public class InvitationService {
                 original.getInstitution().getId(),
                 original.getAssignedRole()), requester);
 
-        // Reset user state to pending so they can accept the new link
         userRepository.findByEmail(original.getRecipientEmail()).ifPresent(user -> {
             if (user.getAccountState() == UserStatus.pending_email_undelivered) {
                 user.setAccountState(UserStatus.pending);
@@ -273,6 +305,44 @@ public class InvitationService {
                 newToken.getCreatedAt(),
                 emailDelivered,
                 emailService.buildInvitationLink(rawToken));
+    }
+
+    public void cancel(UUID tokenId, JwtUserDetails requester) {
+        InvitationToken token = invitationTokenRepository.findById(tokenId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invitation not found."));
+
+        if (!isAdministrator(requester)) {
+            if (requester.institutionId() == null
+                    || !token.getInstitution().getId().equals(requester.institutionId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "You can only cancel invitations for your own institution.");
+            }
+        }
+
+        if (token.getUsedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This invitation has already been accepted.");
+        }
+
+        Institution institution = token.getInstitution();
+        UserRole cancelledRole = token.getAssignedRole();
+        invitationTokenRepository.delete(token);
+        log.info("Invitation {} cancelled by {}", tokenId, requester != null ? requester.userId() : "unknown");
+
+        // If the cancelled invitation was for a validator and the institution is PENDING,
+        // revert to INACTIVE if no other pending validator invitations and no active validators remain.
+        if (cancelledRole == UserRole.validator
+                && institution.getStatus() == InstitutionStatus.pending) {
+            long pendingValidatorInvites = invitationTokenRepository
+                    .countByInstitutionIdAndAssignedRoleAndUsedAtIsNullAndExpiresAtAfter(
+                            institution.getId(), UserRole.validator, Instant.now());
+            long activeValidators = userRepository
+                    .countByInstitutionIdAndRoleAndAccountState(
+                            institution.getId(), UserRole.validator, UserStatus.active);
+            if (pendingValidatorInvites == 0 && activeValidators == 0) {
+                institutionService.transitionToInactive(institution.getId());
+            }
+        }
     }
 
     @Transactional(readOnly = true)

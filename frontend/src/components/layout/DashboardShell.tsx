@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { User } from '../../types/auth.types'
+import Spinner from '../common/Spinner'
 
-export type DashboardNavId = 'home' | 'submit' | 'user-management' | 'scheduler' | 'analytics'
+export type DashboardNavId = 'home' | 'submit' | 'institution-management' | 'user-management' | 'scheduler' | 'resolution' | 'analytics' | 'media-repository' | 'notifications'
 
 interface DashboardShellProps {
   user: User
@@ -14,6 +15,8 @@ interface DashboardShellProps {
   onDismissBanner: () => void
   onStayLoggedIn: () => void
   onLogout: () => void
+  logoutLoading: boolean
+  notificationBadge?: number
   children: ReactNode
 }
 
@@ -35,6 +38,8 @@ export default function DashboardShell({
   onDismissBanner,
   onStayLoggedIn,
   onLogout,
+  logoutLoading,
+  notificationBadge = 0,
   children,
 }: DashboardShellProps) {
   const navigate = useNavigate()
@@ -75,7 +80,10 @@ export default function DashboardShell({
           </div>
 
           <div className="sidebar-nav">
-            {navItems.filter((item) => item.visible).map((item) => (
+            {groupDashboardNavItems(navItems.filter((item) => item.visible)).map((group) => (
+              <div className="sidebar-nav-group" key={group.label}>
+                <div className="sidebar-nav-label">{group.label}</div>
+                {group.items.map((item) => (
               <button
                 className={`sidebar-link${activeNav === item.id ? ' active' : ''}`}
                 type="button"
@@ -88,7 +96,15 @@ export default function DashboardShell({
               >
                 <i className={item.icon}></i>
                 <span>{item.label}</span>
+                {item.id === 'notifications' && notificationBadge > 0 && (
+                  <span className="sidebar-notif-badge" aria-label={`${notificationBadge} unread notifications`}>
+                    {notificationBadge > 99 ? '99+' : notificationBadge}
+                    <span className="sidebar-notif-badge-label">new</span>
+                  </span>
+                )}
               </button>
+                ))}
+              </div>
             ))}
           </div>
         </aside>
@@ -109,8 +125,23 @@ export default function DashboardShell({
               <div className={`role-chip ${roleChip(user).className}`} id="role-chip">
                 {roleChip(user).label}
               </div>
-              <div className="dash-avatar" id="dash-avatar" onClick={onToggleDropdown}>
+              <div
+                className={`dash-avatar${showDropdown ? ' open' : ''}`}
+                id="dash-avatar"
+                onClick={onToggleDropdown}
+                role="button"
+                tabIndex={0}
+                aria-haspopup="menu"
+                aria-expanded={showDropdown}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    onToggleDropdown()
+                  }
+                }}
+              >
                 <span id="dash-initials">{user.initials}</span>
+                <i className="ti ti-chevron-down dash-avatar-caret" aria-hidden="true"></i>
                 <div className={`user-dropdown${showDropdown ? '' : ' hidden'}`} id="user-dropdown">
                   <div className="udrop-header">
                     <div className="udrop-name" id="dd-name">
@@ -120,16 +151,27 @@ export default function DashboardShell({
                       {capitalize(user.role)} · {getInstitutionName(user)}
                     </div>
                   </div>
-                  <div className="udrop-item">
+                  <button type="button" className="udrop-item" disabled>
                     <i className="ti ti-key"></i> Change Password
-                  </div>
-                  <div className="udrop-item">
+                  </button>
+                  <button type="button" className="udrop-item" disabled>
                     <i className="ti ti-settings"></i> Account Settings
-                  </div>
+                  </button>
                   <div className="udrop-sep"></div>
-                  <div className="udrop-item danger" onClick={onLogout}>
-                    <i className="ti ti-logout" style={{ color: 'var(--error)' }}></i> Sign Out
-                  </div>
+                  <button
+                    type="button"
+                    className="udrop-item danger udrop-button"
+                    onClick={onLogout}
+                    disabled={logoutLoading}
+                    aria-busy={logoutLoading}
+                  >
+                    {logoutLoading ? (
+                      <Spinner size="xs" color="inherit" aria-label="Signing out" />
+                    ) : (
+                      <i className="ti ti-logout" style={{ color: 'var(--error)' }}></i>
+                    )}
+                    <span>{logoutLoading ? 'Signing out' : 'Sign Out'}</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -155,29 +197,72 @@ function dashboardNavItems(user: User): DashboardNavItem[] {
       id: 'submit',
       icon: user.role === 'validator' ? 'ti ti-clipboard-list' : 'ti ti-photo-up',
       label: user.role === 'validator' ? 'Review Queue' : 'Submit Content',
-      path: user.role === 'contributor' ? '/submissions/new' : undefined,
+      path: user.role === 'validator' ? '/validation/queue' : '/submissions/new',
       visible: user.role === 'validator' || user.role === 'contributor',
+    },
+    {
+      id: 'institution-management',
+      icon: 'ti ti-building',
+      label: 'Institution Management',
+      path: '/admin/institution-management',
+      visible: user.role === 'admin',
     },
     {
       id: 'user-management',
       icon: 'ti ti-users',
       label: 'User Management',
       path: '/admin/user-management/invitations',
-      visible: user.role === 'admin' || user.role === 'validator',
+      visible: user.role === 'validator',
+    },
+    {
+      id: 'media-repository',
+      icon: 'ti ti-photo',
+      label: 'Media Repository',
+      path: '/media-repository',
+      visible: true,
+    },
+    {
+      id: 'notifications',
+      icon: 'ti ti-bell',
+      label: 'Notifications',
+      path: '/notifications',
+      visible: true,
     },
     {
       id: 'scheduler',
       icon: 'ti ti-calendar-event',
-      label: 'Scheduler',
-      visible: user.role === 'admin' || user.role === 'validator',
+      label: 'Calendar',
+      path: '/scheduler/calendar',
+      visible: true,
+    },
+    {
+      id: 'resolution',
+      icon: 'ti ti-alert-triangle',
+      label: 'Resolution Center',
+      path: '/admin/resolution',
+      visible: user.role === 'admin',
     },
     {
       id: 'analytics',
       icon: 'ti ti-chart-bar',
       label: 'Analytics',
-      visible: user.role === 'admin',
+      path: '/analytics',
+      visible: true,
     },
   ]
+}
+
+function groupDashboardNavItems(items: DashboardNavItem[]) {
+  return [
+    {
+      label: 'Workspace',
+      items: items.filter((item) => ['home', 'submit', 'media-repository', 'notifications'].includes(item.id)),
+    },
+    {
+      label: 'Operations',
+      items: items.filter((item) => ['institution-management', 'user-management', 'scheduler', 'resolution', 'analytics'].includes(item.id)),
+    },
+  ].filter((group) => group.items.length > 0)
 }
 
 function roleChip(user: User) {
