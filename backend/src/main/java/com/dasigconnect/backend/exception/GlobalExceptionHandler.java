@@ -112,8 +112,9 @@ public class GlobalExceptionHandler {
             HttpRequestMethodNotSupportedException ex,
             HttpServletRequest request) {
         String[] supported = ex.getSupportedMethods();
+        String sanitizedPathForLog = sanitizeForLog(request.getRequestURI());
         log.warn("Method not allowed: {} {} (supported: {})",
-                request.getMethod(), request.getRequestURI(),
+                request.getMethod(), sanitizedPathForLog,
                 supported != null ? Arrays.toString(supported) : "none");
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(Map.of(
                 "error", "Method not allowed",
@@ -136,6 +137,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public void handleAccessDenied(AccessDeniedException ex) throws AccessDeniedException {
         throw ex;
+    }
+
+    private String sanitizeForLog(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.replace('\n', '_').replace('\r', '_');
     }
 
     @ExceptionHandler(Exception.class)
