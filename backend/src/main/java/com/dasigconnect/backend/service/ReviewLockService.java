@@ -71,7 +71,7 @@ public class ReviewLockService {
                     "Submission is not in a reviewable state.");
         }
 
-        ReviewLock existing = reviewLockRepository.findBySubmissionId(submissionId).orElse(null);
+        ReviewLock existing = reviewLockRepository.findBySubmissionIdWithLockedBy(submissionId).orElse(null);
 
         if (existing != null) {
             if (existing.getExpiresAt().isAfter(Instant.now())) {

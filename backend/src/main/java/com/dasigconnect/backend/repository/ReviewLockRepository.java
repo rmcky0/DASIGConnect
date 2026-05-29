@@ -16,6 +16,9 @@ public interface ReviewLockRepository extends JpaRepository<ReviewLock, UUID> {
 
     Optional<ReviewLock> findBySubmissionId(UUID submissionId);
 
+    @Query("SELECT r FROM ReviewLock r JOIN FETCH r.lockedBy WHERE r.submission.id = :submissionId")
+    Optional<ReviewLock> findBySubmissionIdWithLockedBy(@Param("submissionId") UUID submissionId);
+
     @Modifying
     @Query("DELETE FROM ReviewLock r WHERE r.submission.id = :submissionId")
     void deleteBySubmissionId(@Param("submissionId") UUID submissionId);
