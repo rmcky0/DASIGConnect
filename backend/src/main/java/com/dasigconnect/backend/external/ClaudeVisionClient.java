@@ -20,8 +20,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import javax.imageio.ImageIO;
 
 /**
@@ -153,17 +157,32 @@ public class ClaudeVisionClient {
 
     private record ImageData(byte[] bytes, String mediaType) {}
 
+    @Value("${supabase.allowed-storage-hosts:}")
+    private String allowedStorageHostsConfig;
+
+    private Set<String> allowedImageHosts = Collections.emptySet();
+
+    @jakarta.annotation.PostConstruct
+    void initAllowedHosts() {
+        allowedImageHosts = Arrays.stream(allowedStorageHostsConfig.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> s.toLowerCase(Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
     public PreparedImage prepareImageForEmbedding(String url) {
         ImageData data = fetchAndPrepareImage(url);
         return new PreparedImage(data.bytes(), data.mediaType());
     }
 
     private ImageData fetchAndPrepareImage(String url) {
-        byte[] raw = fetchImageBytes(url);
-        String mediaType = detectMediaType(url);
+        URI imageUri = validateAndNormalizeImageUri(url);
+        byte[] raw = fetchImageBytes(imageUri);
+        String mediaType = detectMediaType(imageUri);
         if (raw.length <= MAX_IMAGE_BYTES) return new ImageData(raw, mediaType);
 
-        log.warn("Image at {} is {} bytes (>{} MB limit) — scaling down", url, raw.length, MAX_IMAGE_BYTES / (1024 * 1024));
+        log.warn("Image at {} is {} bytes (>{} MB limit) — scaling down", imageUri, raw.length, MAX_IMAGE_BYTES / (1024 * 1024));
         byte[] scaled = scaleDown(raw);
         return new ImageData(scaled, "image/jpeg");
     }
@@ -205,22 +224,22 @@ public class ClaudeVisionClient {
         }
     }
 
-    private byte[] fetchImageBytes(String url) {
+    private byte[] fetchImageBytes(URI imageUri) {
         try {
             // Try unauthenticated first (works for public buckets)
-            HttpResponse<byte[]> res = sendImageRequest(url, null);
+            HttpResponse<byte[]> res = sendImageRequest(imageUri, null);
             if (res.statusCode() == 200) return res.body();
 
             // On auth error, retry with the Supabase service role key (private bucket)
             if ((res.statusCode() == 401 || res.statusCode() == 403)
                     && supabaseServiceRoleKey != null && !supabaseServiceRoleKey.isBlank()) {
-                HttpResponse<byte[]> authRes = sendImageRequest(url, supabaseServiceRoleKey);
+                HttpResponse<byte[]> authRes = sendImageRequest(imageUri, supabaseServiceRoleKey);
                 if (authRes.statusCode() == 200) return authRes.body();
                 throw new ClaudeApiException(
-                        "Failed to fetch image (HTTP " + authRes.statusCode() + " with auth): " + url);
+                        "Failed to fetch image (HTTP " + authRes.statusCode() + " with auth): " + imageUri);
             }
 
-            throw new ClaudeApiException("Failed to fetch image (HTTP " + res.statusCode() + "): " + url);
+            throw new ClaudeApiException("Failed to fetch image (HTTP " + res.statusCode() + "): " + imageUri);
         } catch (ClaudeApiException e) {
             throw e;
         } catch (Exception e) {
@@ -228,9 +247,9 @@ public class ClaudeVisionClient {
         }
     }
 
-    private HttpResponse<byte[]> sendImageRequest(String url, String bearerToken) throws Exception {
+    private HttpResponse<byte[]> sendImageRequest(URI imageUri, String bearerToken) throws Exception {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(url))
+                .uri(imageUri)
                 .GET()
                 .timeout(Duration.ofSeconds(8));
         if (bearerToken != null) {
@@ -239,8 +258,31 @@ public class ClaudeVisionClient {
         return httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
     }
 
-    private String detectMediaType(String url) {
-        String lower = url.toLowerCase();
+    private URI validateAndNormalizeImageUri(String url) {
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (Exception e) {
+            throw new ClaudeApiException("Invalid image URL.");
+        }
+        if (!uri.isAbsolute() || uri.getHost() == null) {
+            throw new ClaudeApiException("Image URL must be absolute.");
+        }
+        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new ClaudeApiException("Only HTTPS image URLs are allowed.");
+        }
+        if (uri.getUserInfo() != null) {
+            throw new ClaudeApiException("Image URL must not contain user info.");
+        }
+        String host = uri.getHost().toLowerCase(Locale.ROOT);
+        if (allowedImageHosts.isEmpty() || !allowedImageHosts.contains(host)) {
+            throw new ClaudeApiException("Image URL host is not allowed.");
+        }
+        return uri;
+    }
+
+    private String detectMediaType(URI imageUri) {
+        String lower = imageUri.getPath() == null ? "" : imageUri.getPath().toLowerCase(Locale.ROOT);
         if (lower.contains(".png")) return "image/png";
         if (lower.contains(".gif")) return "image/gif";
         if (lower.contains(".webp")) return "image/webp";
