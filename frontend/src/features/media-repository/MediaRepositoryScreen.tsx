@@ -4,12 +4,21 @@ import type { User } from "../../types/auth.types";
 import type { MediaAsset, MediaUsage } from "../../api/mediaApi";
 import {
   bulkDeleteMediaAssets,
+  bulkMoveAssets,
   deleteMediaAsset,
   getMediaAsset,
   getMediaAssetUploadUrl,
   registerMediaAsset,
 } from "../../api/mediaApi";
+import {
+  listFolders,
+  createFolder,
+  renameFolder,
+  deleteFolder,
+  type Folder,
+} from "../../api/folderApi";
 import { listInstitutions, type InstitutionResponse } from "../../api/authApi";
+import FolderSidebar, { type FolderFilterMode } from "./components/FolderSidebar";
 import {
   attachAsset,
   listSubmissions,
@@ -26,6 +35,7 @@ import UploadModal from "./components/UploadModal";
 import DeleteModal from "./components/DeleteModal";
 import AddToDraftModal from "./components/AddToDraftModal";
 import "../../styles/media-repository.css";
+import "../../styles/folders.css";
 
 interface MediaRepositoryScreenProps {
   user: User;
@@ -92,6 +102,11 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
 
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(true);
+  const [filterMode, setFilterMode] = useState<FolderFilterMode>("all");
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -143,9 +158,79 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
       .catch(() => toast.error("Could not load institution filters."));
   }, [isAdmin, toast]);
 
+  function refreshFolders() {
+    listFolders()
+      .then(setFolders)
+      .catch(() => { /* sidebar shows empty state on error */ })
+      .finally(() => setFoldersLoading(false));
+  }
+
+  useEffect(() => {
+    refreshFolders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [networkView, selectedInstitutionId]);
+
+  const unfiledCount = useMemo(() => assets.filter((a) => !a.folderId).length, [assets]);
+
+  function selectAllFolders() { setFilterMode("all"); setSelectedFolderId(null); }
+  function selectUnfiled() { setFilterMode("unfiled"); setSelectedFolderId(null); }
+  function selectFolder(id: string) { setFilterMode("folder"); setSelectedFolderId(id); }
+
+  async function handleCreateFolder() {
+    const name = window.prompt("New folder name:");
+    if (!name || !name.trim()) return;
+    try {
+      await createFolder({ name: name.trim() });
+      refreshFolders();
+      toast.success("Folder created.");
+    } catch {
+      toast.error("Could not create the folder.");
+    }
+  }
+
+  async function handleRenameFolder(folder: Folder) {
+    const name = window.prompt("Rename folder:", folder.name);
+    if (!name || !name.trim() || name.trim() === folder.name) return;
+    try {
+      await renameFolder(folder.id, name.trim());
+      refreshFolders();
+    } catch {
+      toast.error("Could not rename the folder.");
+    }
+  }
+
+  async function handleDeleteFolder(folder: Folder) {
+    if (!window.confirm(`Delete folder "${folder.name}"? Assets inside are moved to Unfiled, not deleted.`)) return;
+    try {
+      await deleteFolder(folder.id);
+      if (selectedFolderId === folder.id) selectAllFolders();
+      refreshFolders();
+      void refresh(); // assets in the folder become unfiled (folder_id → null)
+      toast.success("Folder deleted.");
+    } catch {
+      toast.error("Could not delete the folder.");
+    }
+  }
+
+  async function handleMoveSelected(folderId: string | null) {
+    const ids = [...checkedIds];
+    if (ids.length === 0) return;
+    try {
+      const res = await bulkMoveAssets(ids, folderId);
+      toast.success(`Moved ${res.affected} ${res.affected === 1 ? "asset" : "assets"}.`);
+      clearChecked();
+      void refresh();
+      refreshFolders();
+    } catch {
+      toast.error("Could not move the selected assets.");
+    }
+  }
+
   const filteredAssets = useMemo(() => {
     const term = search.trim().toLowerCase();
     let result = assets.filter((a) => {
+      if (filterMode === "unfiled" && a.folderId) return false;
+      if (filterMode === "folder" && selectedFolderId && a.folderId !== selectedFolderId) return false;
       if (activeTags.size > 0) {
         const assetTagLabels = new Set((a.aiTags ?? []).map((t) => t.label.toLowerCase()));
         const selectedTags = [...activeTags].map((tag) => tag.toLowerCase());
@@ -166,7 +251,7 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
     });
 
     return result;
-  }, [assets, search, sort, activeTags]);
+  }, [assets, search, sort, activeTags, filterMode, selectedFolderId]);
 
   const selectedAssets = useMemo(
     () => assets.filter((a) => checkedIds.has(a.id)),
@@ -550,6 +635,25 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
         onTagToggle={toggleTag}
       />
 
+      {/* Folders sidebar + main column */}
+      <div className="med-layout">
+      <FolderSidebar
+        folders={folders}
+        loading={foldersLoading}
+        filterMode={filterMode}
+        selectedFolderId={selectedFolderId}
+        allCount={assets.length}
+        unfiledCount={unfiledCount}
+        selectionCount={checkedIds.size}
+        onSelectAll={selectAllFolders}
+        onSelectUnfiled={selectUnfiled}
+        onSelectFolder={selectFolder}
+        onCreate={() => void handleCreateFolder()}
+        onRename={(f) => void handleRenameFolder(f)}
+        onDelete={(f) => void handleDeleteFolder(f)}
+        onMoveSelected={(id) => void handleMoveSelected(id)}
+      />
+      <div className="med-main">
       {/* Result strip */}
       <div className="med-result-strip">
         <p className="med-result-count">
@@ -595,6 +699,8 @@ export default function MediaRepositoryScreen({ user }: MediaRepositoryScreenPro
           ))}
         </div>
       )}
+      </div>{/* /med-main */}
+      </div>{/* /med-layout */}
 
       {/* Detail Panel (portal) */}
       <AssetDetailPanel

@@ -18,6 +18,7 @@ public class MediaAssetSummaryDto {
     private String institutionName;
     private UUID uploaderId;
     private String uploaderEmail;
+    private UUID folderId;
 
     public static MediaAssetSummaryDto from(MediaAsset asset) {
         MediaAssetSummaryDto dto = new MediaAssetSummaryDto();
@@ -33,6 +34,7 @@ public class MediaAssetSummaryDto {
         dto.institutionName = asset.getInstitution().getName();
         dto.uploaderId = asset.getUploader().getId();
         dto.uploaderEmail = asset.getUploader().getEmail();
+        dto.folderId = asset.getFolderId();
         return dto;
     }
 
@@ -48,4 +50,5 @@ public class MediaAssetSummaryDto {
     public String getInstitutionName() { return institutionName; }
     public UUID getUploaderId() { return uploaderId; }
     public String getUploaderEmail() { return uploaderEmail; }
+    public UUID getFolderId() { return folderId; }
 }

@@ -31,6 +31,7 @@ export interface MediaAsset {
   status: MediaAssetStatus;
   aiTags?: AiTag[];
   usedIn?: MediaUsage[];
+  folderId?: string | null;
   widthPx?: number;
   heightPx?: number;
   durationSeconds?: number;
@@ -74,6 +75,7 @@ interface MediaAssetPageResponse {
     institutionName?: string | null;
     uploaderId?: string | null;
     uploaderEmail?: string | null;
+    folderId?: string | null;
   }>;
   totalCount: number;
   page: number;
@@ -113,6 +115,7 @@ function rawToAsset(raw: MediaAssetPageResponse["items"][0]): MediaAsset {
     uploadedAt: raw.createdAt,
     status: "ready" as const,
     aiTags: raw.aiCategory ? [{ label: raw.aiCategory, confidence: 100 }] : [],
+    folderId: raw.folderId ?? null,
   };
 }
 
