@@ -153,6 +153,13 @@ public class ClaudeVisionClient {
         }
     }
 
+    private String sanitizeForLog(String value) {
+        if (value == null) return null;
+        return value.replace('\r', '_')
+                .replace('\n', '_')
+                .replace('\t', '_');
+    }
+
     public record PreparedImage(byte[] bytes, String mediaType) {}
 
     private record ImageData(byte[] bytes, String mediaType) {}
@@ -163,7 +170,7 @@ public class ClaudeVisionClient {
     private Set<String> allowedImageHosts = Collections.emptySet();
 
     @jakarta.annotation.PostConstruct
-    void initAllowedHosts() {
+        log.warn("Image at {} is {} bytes (>{} MB limit) — scaling down", sanitizeForLog(url), raw.length, MAX_IMAGE_BYTES / (1024 * 1024));
         allowedImageHosts = Arrays.stream(allowedStorageHostsConfig.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
