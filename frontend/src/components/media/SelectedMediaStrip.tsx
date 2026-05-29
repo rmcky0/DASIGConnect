@@ -14,6 +14,18 @@ const SOURCE_LABELS: Record<string, string> = {
   ai: "AI Pick",
 };
 
+function toSafeMediaSrc(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value.startsWith("blob:") || value.startsWith("/")) return value;
+  try {
+    const parsed = new URL(value, window.location.origin);
+    if (parsed.protocol === "https:" || parsed.protocol === "http:") return parsed.href;
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 export default function SelectedMediaStrip({
   items,
   disabled = false,
@@ -89,9 +101,9 @@ export default function SelectedMediaStrip({
               <div className="sms-thumb">
                 {item.mediaType === "video" ? (
                   <div className="sms-video-thumb">
-                    {item.previewUrl ? (
+                    {toSafeMediaSrc(item.previewUrl) ? (
                       <video
-                        src={item.previewUrl}
+                        src={toSafeMediaSrc(item.previewUrl)}
                         className="sms-video"
                         muted
                         playsInline
@@ -108,7 +120,7 @@ export default function SelectedMediaStrip({
                   </div>
                 ) : (
                   <img
-                    src={item.previewUrl}
+                    src={toSafeMediaSrc(item.previewUrl)}
                     alt={item.fileName}
                     className="sms-img"
                     draggable={false}
