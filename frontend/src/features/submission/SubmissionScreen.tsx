@@ -252,6 +252,11 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
       setActiveStep("details");
       return;
     }
+    if (step === "schedule" && !hasMedia && form.pendingAssetIds.length === 0) {
+      toast.warning("Add at least one media file before setting a schedule.");
+      setActiveStep("media");
+      return;
+    }
     setActiveStep(step);
   }
 
@@ -681,11 +686,14 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
     if (!form.eventTitle.trim()) missing.push("an event title");
     if (!form.eventDate) missing.push("an event date");
     if (!form.caption.trim()) missing.push("a caption");
+    if (!hasMedia && form.pendingAssetIds.length === 0) missing.push("at least one media file");
     if (!scheduledAt) missing.push("a preferred schedule");
     if (missing.length > 0) {
       toast.error(`Add ${missing.join(", ")} before submitting.`);
       if (!form.eventTitle.trim() || !form.eventDate || !form.caption.trim()) {
         setActiveStep("details");
+      } else if (!hasMedia && form.pendingAssetIds.length === 0) {
+        setActiveStep("media");
       } else {
         setActiveStep("schedule");
       }
@@ -1136,7 +1144,8 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
                 className="sub-btn-primary"
                 type="button"
                 onClick={() => setModal("submit")}
-                disabled={busy || Boolean(hydratingId)}
+                disabled={busy || Boolean(hydratingId) || previewValidation.blockingErrors.length > 0}
+                title={previewValidation.blockingErrors[0]}
               >
                 {submitting ? <i className="ti ti-loader-2 sub-spin"></i> : <i className="ti ti-send"></i>} Submit for Review
               </button>
@@ -1178,6 +1187,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
               steps={progressSteps}
               activeStep={activeStep}
               isDetailsComplete={isDetailsComplete}
+              hasMediaComplete={hasMedia || form.pendingAssetIds.length > 0}
               onStepClick={handleStepNav}
             />
           )}
@@ -1520,7 +1530,8 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
               className="sub-guard-submit-btn"
               type="button"
               onClick={() => setModal("submit")}
-              disabled={busy || Boolean(hydratingId)}
+              disabled={busy || Boolean(hydratingId) || previewValidation.blockingErrors.length > 0}
+              title={previewValidation.blockingErrors[0]}
             >
               {submitting ? <i className="ti ti-loader-2 sub-spin"></i> : <i className="ti ti-send"></i>} Submit for Review
             </button>
@@ -1544,7 +1555,7 @@ export default function SubmissionScreen({ user }: SubmissionScreenProps) {
         <ConfirmModal
           icon="ti-send"
           title="Submit for Review?"
-          description={`This submission has the required title, event date, caption, and preferred schedule. Media is optional for text-only posts. It will be sent to your institution's Validator. Readiness score: ${readiness.score} / 100.`}
+          description={`This submission will be sent to your institution's Validator for review. Readiness score: ${readiness.score} / 100.`}
           cancelLabel="Go Back"
           confirmLabel={submitting ? "Submitting..." : "Confirm Submission"}
           loading={submitting}
@@ -1860,6 +1871,7 @@ function StepProgress({
   steps,
   activeStep,
   isDetailsComplete,
+  hasMediaComplete,
   onStepClick,
 }: {
   steps: Array<{
@@ -1869,10 +1881,21 @@ function StepProgress({
   }>;
   activeStep: ProgressStep;
   isDetailsComplete: boolean;
+  hasMediaComplete: boolean;
   onStepClick: (step: ProgressStep) => void;
 }) {
   function isLocked(id: ProgressStep) {
-    return id === "schedule" && !isDetailsComplete;
+    if (id !== "schedule") return false;
+    if (!isDetailsComplete) return true;
+    if (!hasMediaComplete) return true;
+    return false;
+  }
+
+  function lockedTitle(id: ProgressStep) {
+    if (id !== "schedule") return undefined;
+    if (!isDetailsComplete) return "Complete Post Details first — title, event date, and caption are required.";
+    if (!hasMediaComplete) return "Add at least one media file before setting a schedule.";
+    return undefined;
   }
 
   return (
@@ -1885,7 +1908,7 @@ function StepProgress({
             key={step.id}
             className={`sub-step ${active ? "active" : ""} ${step.complete ? "complete" : ""} ${locked ? "locked" : ""}`}
             type="button"
-            title={locked ? "Complete Post Details first — title, event date, and caption are required." : undefined}
+            title={lockedTitle(step.id)}
             onClick={() => onStepClick(step.id)}
           >
             <span className="sub-step-circle">
@@ -2752,9 +2775,15 @@ function getPreviewValidation(
     (file) => !isAllowedFile(file, lookups.allowedFileTypes),
   );
 
+  const noMedia =
+    form.files.length === 0 &&
+    form.savedAssets.length === 0 &&
+    form.pendingAssetIds.length === 0;
+
   if (!form.eventTitle.trim()) missingItems.push("Add an event title.");
   if (!form.eventDate) missingItems.push("Select the event date.");
   if (!form.caption.trim()) missingItems.push("Write a caption.");
+  if (noMedia) missingItems.push("Upload at least one media file.");
   if (!scheduledAt) missingItems.push("Choose a preferred schedule.");
   if (oversizedFile) {
     missingItems.push(
@@ -2771,6 +2800,7 @@ function getPreviewValidation(
   if (!form.eventTitle.trim()) blockingErrors.push("Event title is required.");
   if (!form.eventDate) blockingErrors.push("Event date is required.");
   if (!form.caption.trim()) blockingErrors.push("Caption is required.");
+  if (noMedia) blockingErrors.push("At least one media file is required.");
   if (!scheduledAt) blockingErrors.push("Preferred schedule is required.");
   if (oversizedFile) {
     blockingErrors.push(
