@@ -147,10 +147,10 @@ Each is one card / one branch (`feat/uc41-...`, `feat/uc42-queue`):
 
 1. ✅ **V28 migration + entities + repos** (done 2026-05-30; applied to dev DB → v28; RLS in-migration; compiles, boots clean).
 2. ✅ **Folder CRUD backend slice** (done 2026-05-30; `MediaFolderService`/`Controller` + DTOs, audit on every change, depth/cycle guards; 13 tests pass; full suite 295 green).
-3. **Folder UI slice** (tree, create/rename/delete, list by folder).
+3. ⬜ **Folder UI slice** (tree, create/rename/delete, list by folder) — **pending**. Needs a small backend addition first: `GET /media-assets?folderId=` (the list endpoint must accept/return `folderId`) so the UI can filter by folder. `folderApi.ts` client already exists.
 4. ✅ **Assign + bulk move/tag slice** (backend; done 2026-05-30; `MediaOrganizationService`/`Controller`: bulk-move/unfile + bulk-tag, institution-guarded + audited; bulk-delete already existed; 10 tests; full suite 320 green). UI deferred to slices 3/6.
 5. ✅ **Album backend slice** (done 2026-05-30; `MediaAlbumService`/`Controller` + DTOs: CRUD, add/remove assets, set cover; audited; 15 tests pass; full suite 310 green).
-6. **Album UI slice** (album grid, open album, add/remove selected, cover).
+6. ✅ **Album UI slice** (done 2026-05-30; `AlbumsScreen` at `/media-albums`: list/create/open/delete albums, add assets via picker, remove asset, set cover; reached from a Media Repository header link; `folderApi`/`albumApi` clients + `mediaApi` bulk fns; frontend build + targeted ESLint clean).
 7. ✅ **Ingestion-queue infra** (done 2026-05-30; `IngestionExecutorConfig` bounded 2-worker pool + `MediaIngestionQueueService.enqueue` with skip-if-READY idempotency; `classifyAndEmbed` de-`@Async`'d; upload + reconciliation repointed to the queue; 4 tests; full suite 324 green; context boots clean). Import-batch *grouping* deferred to a follow-up.
 8. **Spike — 200-asset dump** (D5): measure wall-clock to all-`READY`, max concurrent
    Hikari connections (must stay ≤5, 0 timeouts), `FAILED` count. Record the throughput
